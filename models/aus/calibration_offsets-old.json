@@ -1,0 +1,8 @@
+{
+  "offset_p25": -0.07860469640025469,
+  "offset_p75": 0.17135899362942475,
+  "calibrated_coverage_p25": 24.997482123073826,
+  "calibrated_coverage_p75": 74.99244636922148,
+  "generated_at": "2025-12-14T14:12:13.433755",
+  "model_version": "v1.0"
+}
