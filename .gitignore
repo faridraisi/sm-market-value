@@ -28,6 +28,9 @@ Thumbs.db
 # Reports (generated outputs)
 reports/*.csv
 
+# Archive (legacy/unused files)
+archive/
+
 # Temporary files
 *.tmp
 *.bak

@@ -57,7 +57,7 @@
       "response": []
     },
     {
-      "name": "Score Sale (JSON only, no DB write)",
+      "name": "Score Sale (Dry Run)",
       "request": {
         "method": "POST",
         "header": [

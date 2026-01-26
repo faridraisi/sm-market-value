@@ -156,13 +156,15 @@ This allows NZL sales to benefit from larger sample sizes by including Australia
 
 ```
 sm-market-value/
+├── src/
+│   ├── api.py                      # FastAPI application
+│   └── score_sale.py               # Database-driven CLI scoring
 ├── models/
 │   ├── aus/                        # Australia models
 │   ├── nzl/                        # New Zealand models
 │   └── usa/                        # USA models (pending)
-├── api.py                          # FastAPI application
-├── score_sale.py                   # Database-driven CLI scoring
-├── 03.score_lots_original.py       # CSV-based scoring (legacy)
+├── archive/                        # Legacy/unused files (gitignored)
+├── reports/                        # Generated outputs (gitignored)
 ├── DEPLOYMENT.md                   # Setup & usage guide
 ├── CHANGELOG.md                    # Version history
 └── README.md                       # This file (model documentation)

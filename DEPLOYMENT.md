@@ -80,7 +80,7 @@ API_KEY=your-secret-api-key
 ### CLI Reference
 
 ```
-usage: score_sale.py [-h] --sale-id SALE_ID [--dry-run] [--session-median SESSION_MEDIAN]
+usage: python3 src/score_sale.py [-h] --sale-id SALE_ID [--dry-run] [--session-median SESSION_MEDIAN]
 
 Score yearling lots for market value prediction
 
@@ -96,17 +96,17 @@ Arguments:
 source .venv/bin/activate
 
 # Preview to CSV
-python3 score_sale.py --sale-id 2096 --dry-run
+python3 src/score_sale.py --sale-id 2096 --dry-run
 
 # Write to database
-python3 score_sale.py --sale-id 2096
+python3 src/score_sale.py --sale-id 2096
 ```
 
 ### Score a Sale (Pre-Sale)
 
 ```bash
 # Provide expected session median
-python3 score_sale.py --sale-id 2098 --session-median 360000 --dry-run
+python3 src/score_sale.py --sale-id 2098 --session-median 360000 --dry-run
 ```
 
 ### Typical Session Medians
@@ -144,13 +144,13 @@ ORDER BY S.startDate DESC;
 
 ```bash
 source .venv/bin/activate
-uvicorn api:app --reload --port 8000
+uvicorn src.api:app --reload --port 8000
 ```
 
 ### Production
 
 ```bash
-uvicorn api:app --host 0.0.0.0 --port 8000 --workers 4
+uvicorn src.api:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
 ### With Process Manager (PM2)
@@ -160,7 +160,7 @@ uvicorn api:app --host 0.0.0.0 --port 8000 --workers 4
 npm install -g pm2
 
 # Start API
-pm2 start "uvicorn api:app --host 0.0.0.0 --port 8000" --name mv-api
+pm2 start "uvicorn src.api:app --host 0.0.0.0 --port 8000" --name mv-api
 
 # View logs
 pm2 logs mv-api
@@ -182,7 +182,7 @@ After=network.target
 User=www-data
 WorkingDirectory=/path/to/sm-market-value
 Environment="PATH=/path/to/sm-market-value/.venv/bin"
-ExecStart=/path/to/sm-market-value/.venv/bin/uvicorn api:app --host 0.0.0.0 --port 8000
+ExecStart=/path/to/sm-market-value/.venv/bin/uvicorn src.api:app --host 0.0.0.0 --port 8000
 Restart=always
 
 [Install]
@@ -277,7 +277,7 @@ Import `postman_collection.json` into Postman for pre-configured requests.
 ### CLI
 
 ```bash
-python3 score_sale.py --sale-id 2096 --dry-run
+python3 src/score_sale.py --sale-id 2096 --dry-run
 ```
 
 ### API
