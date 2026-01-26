@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 # CONFIGURATION
 # ============================================================================
 
-MODEL_VERSION = "v2.1"
+MODEL_VERSION = "v2.1.1"
 
 COUNTRY_CURRENCY_MAP = {
     'AUS': 1,  # AUD
