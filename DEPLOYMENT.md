@@ -77,6 +77,19 @@ API_KEY=your-secret-api-key
 
 ## Running the CLI
 
+### CLI Reference
+
+```
+usage: score_sale.py [-h] --sale-id SALE_ID [--dry-run] [--session-median SESSION_MEDIAN]
+
+Score yearling lots for market value prediction
+
+Arguments:
+  --sale-id SALE_ID     Sale ID to score (required)
+  --dry-run             Write to CSV instead of database
+  --session-median      Override session median (required for pre-sale scoring)
+```
+
 ### Score a Sale (Post-Sale)
 
 ```bash
@@ -94,6 +107,33 @@ python3 score_sale.py --sale-id 2096
 ```bash
 # Provide expected session median
 python3 score_sale.py --sale-id 2098 --session-median 360000 --dry-run
+```
+
+### Typical Session Medians
+
+| Sale | Median |
+|------|--------|
+| **AUS** | |
+| Inglis Easter | $300,000 - $360,000 AUD |
+| Gold Coast Yearling Sale Book 1 | $200,000 AUD |
+| Gold Coast Yearling Sale Book 2 | $35,000 AUD |
+| Inglis Premier | $80,000 AUD |
+| Inglis Classic | $70,000 AUD |
+| **NZL** | |
+| Karaka Book 1 | $110,000 NZD |
+| Karaka Book 2 | $27,500 NZD |
+| Karaka Summer Sale | $10,000 NZD |
+
+Query historical medians:
+```sql
+SELECT YEAR(S.startDate) as year, S.salesName,
+       (SELECT TOP 1 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY LT.price) OVER ()
+        FROM tblSalesLot LT
+        WHERE LT.salesId = S.Id AND LT.price > 0
+          AND ISNULL(LT.isPassedIn, 0) = 0 AND ISNULL(LT.isWithdrawn, 0) = 0) as median
+FROM tblSales S
+WHERE S.salesName LIKE '%Easter%'
+ORDER BY S.startDate DESC;
 ```
 
 ---
