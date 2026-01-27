@@ -11,108 +11,48 @@ Predict expected yearling sale prices with confidence ranges.
 ### 1. Activate Environment
 
 ```bash
-cd ~/Projects/Market-Value-V2
-source venv/bin/activate
+cd ~/Projects/sm-market-value
+source .venv/bin/activate
 ```
 
-### 2. Set Country
-
-Edit `score_lots.py` lines 17-18:
-
-```python
-# Set country: 'aus' or 'nzl'
-COUNTRY = "aus"
-```
-
-### 3. Check & Set Session Median (Future Sales Only)
-
-For **future sales** (not yet conducted), you must set the session median manually. Past sales have this calculated automatically from actual hammer prices.
-
-```sql
--- Step 1: Check if session_median is set
-SELECT DISTINCT session_median_price 
-FROM dbo.mv_yearling_lot_features_v1 
-WHERE salesId = [YOUR_SALE_ID];
-
--- Step 2: If NULL, look up historical median for that sale type
-SELECT sale_year, sale_name, session_median_price
-FROM dbo.mv_yearling_lot_features_v1
-WHERE sale_name LIKE '%[SALE_NAME]%'
-  AND session_median_price IS NOT NULL
-GROUP BY sale_year, sale_name, session_median_price
-ORDER BY sale_year DESC;
-
--- Step 3: Set the median based on historical average
-UPDATE dbo.mv_yearling_lot_features_v1
-SET session_median_price = [HISTORICAL_MEDIAN]
-WHERE salesId = [YOUR_SALE_ID];
-```
-
-**Typical session medians:**
-
-| Sale | Median |
-|------|--------|
-| **AUS** | |
-| Gold Coast Yearling Sale Book 1 | $200,000 AUD |
-| Gold Coast Yearling Sale Book 2 | $35,000 AUD |
-| Inglis Easter | $300,000 AUD |
-| Inglis Premier | $80,000 AUD |
-| Inglis Classic | $70,000 AUD |
-| **NZL** | |
-| Karaka Book 1 | $110,000 NZD |
-| Karaka Book 2 | $27,500 NZD |
-| Karaka Summer Sale | $10,000 NZD |
-
-> ⚠️ **If you skip this step for future sales, all prices will be NULL.**
-
-### 4. Export Sale Data from SQL Server
-
-Run this query in SSMS/Azure Data Studio and save as CSV (e.g., `sale_2002_inference.csv`):
-
-```sql
-SELECT
-    F.lot_id, 
-    F.horseId, 
-    F.salesId, 
-    F.lot_number, 
-    F.book_number,
-    F.sex,
-    H.horseName AS horse_name,
-    S.horseName AS sire_name,
-    F.sale_company, 
-    F.sale_year, 
-    F.day_number,
-    F.session_median_price,
-    F.sire_sold_count_36m, F.sire_total_offered_36m, F.sire_clearance_rate_36m, F.sire_median_price_36m,
-    F.sire_sold_count_12m, F.sire_total_offered_12m, F.sire_clearance_rate_12m, F.sire_median_price_12m,
-    F.sire_momentum, F.sire_sample_flag_36m,
-    F.dam_progeny_sold_count, F.dam_progeny_total_offered_count, F.dam_progeny_median_price, F.dam_first_foal_flag,
-    F.vendor_sold_count_36m, F.vendor_total_offered_36m, F.vendor_clearance_rate_36m, F.vendor_median_price_36m,
-    F.vendor_volume_bucket, F.vendor_first_seen_flag
-FROM dbo.mv_yearling_lot_features_v1 F
-LEFT JOIN dbo.tblHorse H ON F.horseId = H.id
-LEFT JOIN dbo.tblHorse S ON F.sireId = S.id
-WHERE F.salesId = 2002  -- Change this to your target sale
-ORDER BY F.lot_number;
-```
-
-### 4. Update Script Configuration
-
-Edit `score_lots.py` line 18:
-
-```python
-CSV_PATH = "sale_2002_inference.csv"  # Your exported CSV filename
-```
-
-### 5. Run Scoring
+### 2. Run the Pipeline
 
 ```bash
-python3 score_lots.py
+# Output to CSV (default)
+python score_sale.py --sale-id 2094
+
+# Output directly to database (tblHorseAnalytics)
+python score_sale.py --sale-id 2094 --output db
 ```
 
-### 6. View Results
+This runs two steps automatically:
+1. **Feature rebuild** (`run_rebuild.py`) — Fetches data from database, computes features, outputs `csv/sale_2094_inference.csv`
+2. **Scoring** (`score_lots.py`) — Loads the model, scores lots, outputs to CSV or database
 
-Output saved to `reports/scored_lots.csv` with columns:
+The country is auto-detected from the database, and the correct model is loaded based on `.env` configuration.
+
+### 3. Configuration via .env
+
+Model selection and database output settings in `.env`:
+
+```bash
+# Model selection
+AUS_MODEL=aus   # Use models/aus/ for Australian sales
+NZL_MODEL=nzl   # Use models/nzl/ for NZ sales
+USA_MODEL=usa   # Use models/usa/ for USA sales
+
+# Database output settings
+AUDIT_USER_ID=2  # User ID for createdBy/modifiedBy fields (default: 2)
+```
+
+To use the AUS model for NZL sales (e.g., for cross-country testing):
+```bash
+NZL_MODEL=aus
+```
+
+### 4. View Results
+
+Output saved to `csv/sale_{sale_id}_scored.csv` with columns:
 
 | Column | Description |
 |--------|-------------|
@@ -272,7 +212,20 @@ ORDER BY sale_year DESC;
 
 ### Output Table: `tblHorseAnalytics`
 
-Scored predictions are persisted here for UI display.
+Scored predictions are persisted here for UI display. Use `--output db` to write directly.
+
+| Column | Source |
+|--------|--------|
+| `horseId` | From inference CSV |
+| `salesId` | From inference CSV |
+| `marketValue` | `mv_expected_price` (P50) |
+| `marketValueLow` | `mv_low_price` (P25) |
+| `marketValueHigh` | `mv_high_price` (P75) |
+| `marketValueMultiplier` | `mv_expected_index` |
+| `marketValueConfidence` | `mv_confidence_tier` (high/medium/low) |
+| `sessionMedianPrice` | `session_median_price` |
+| `currencyId` | Auto-set: AUS=1, NZL=6, USA=7 |
+| `modifiedBy` | From `AUDIT_USER_ID` in .env |
 
 ---
 
@@ -329,8 +282,9 @@ Follow the Quick Start steps above.
 ## File Structure
 
 ```
-Market-Value-V2/
-├── venv/                           # Python virtual environment
+sm-market-value/
+├── .venv/                          # Python virtual environment
+├── .env                            # Database credentials & model config
 ├── models/
 │   ├── aus/                        # Australia models
 │   │   ├── mv_v1_q25.txt
@@ -344,12 +298,18 @@ Market-Value-V2/
 │       ├── mv_v1_q75.txt
 │       ├── calibration_offsets.json
 │       └── feature_cols.json
-├── reports/
-│   ├── scored_lots.csv             # Output predictions
+├── csv/                            # CSV outputs
+│   ├── sale_{id}_inference.csv     # Inference data (step 1)
+│   ├── sale_{id}_scored.csv        # Output predictions (step 2)
 │   ├── feature_importance_aus.csv
 │   └── feature_importance_nzl.csv
-├── train_market_value_model.py     # Training script (set COUNTRY)
-├── score_lots.py                   # Scoring script (set COUNTRY)
+├── archive/                        # Legacy scripts
+│   └── score_lots.py               # Old standalone scoring script
+├── src/                            # Training scripts
+│   └── train_market_value_model.py
+├── score_sale.py                   # Pipeline orchestrator (run this)
+├── run_rebuild.py                  # Feature rebuild (step 1)
+├── score_lots.py                   # Lot scoring (step 2)
 ├── requirements.txt
 └── README.md
 ```
@@ -448,6 +408,7 @@ Check that `session_median_price` is set in your inference CSV. Future sales req
 
 | Version | Date | Changes |
 |---------|------|---------|
+| V2.1 | Jan 2025 | Added `--output db` option to write predictions directly to `tblHorseAnalytics`. Elite scaling for predictions >= $300k. Price-aware confidence tiers. |
 | V2.0 | Dec 2024 | Initial production release. LightGBM quantile models with calibrated P25/P50/P75 bands. |
 
 ---

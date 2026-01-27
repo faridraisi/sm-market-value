@@ -447,7 +447,8 @@ def main():
     )
     args = parser.parse_args()
 
-    output_file = f"sale_{args.sale_id}_inference.csv"
+    os.makedirs("csv", exist_ok=True)
+    output_file = f"csv/sale_{args.sale_id}_inference.csv"
 
     try:
         conn = get_connection()
