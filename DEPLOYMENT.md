@@ -67,6 +67,10 @@ USA_MODEL=usa
 # Historical lookback countries (optional)
 HIST_COUNTRIES_NZL=NZL,AUS
 
+# Year range for sale queries (default: 2020-2026)
+YEAR_START=2020
+YEAR_END=2026
+
 # Audit user ID for database writes (default: 2)
 AUDIT_USER_ID=2
 ```

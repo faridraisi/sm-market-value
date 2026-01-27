@@ -41,6 +41,10 @@ AUS_MODEL=aus   # Use models/aus/ for Australian sales
 NZL_MODEL=nzl   # Use models/nzl/ for NZ sales
 USA_MODEL=usa   # Use models/usa/ for USA sales
 
+# Year range for sale queries (default: 2020-2026)
+YEAR_START=2020
+YEAR_END=2026
+
 # Database output settings
 AUDIT_USER_ID=2  # User ID for createdBy/modifiedBy fields (default: 2)
 ```

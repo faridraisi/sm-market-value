@@ -72,7 +72,10 @@ def get_hist_countries(country_code):
 
 def fetch_base_lots(conn, sale_id):
     """Fetch base lots for the target sale."""
-    query = """
+    year_start = int(os.getenv("YEAR_START", 2020))
+    year_end = int(os.getenv("YEAR_END", 2026))
+
+    query = f"""
     SELECT
         LT.Id AS lot_id,
         LT.salesId,
@@ -104,7 +107,7 @@ def fetch_base_lots(conn, sale_id):
     JOIN tblHorse H ON LT.horseId = H.id
     LEFT JOIN tblHorse SIRE ON H.sireId = SIRE.id
     WHERE LT.salesId = ?
-        AND YEAR(SL.startDate) BETWEEN 2020 AND 2026
+        AND YEAR(SL.startDate) BETWEEN {year_start} AND {year_end}
         AND LTP.salesLotTypeName = 'Yearling'
         AND ISNULL(LT.isWithdrawn, 0) = 0
     """
