@@ -347,6 +347,11 @@ def score_lots(
 
     X = df[feature_cols].fillna(0)
 
+    # Ensure numeric types for LightGBM (handles object dtype from direct DataFrame passing)
+    for col in X.columns:
+        if X[col].dtype == "object":
+            X[col] = pd.to_numeric(X[col], errors="coerce").fillna(0)
+
     # Predict (raw log-space)
     pred_q25 = models["q25"].predict(X)
     pred_q50 = models["q50"].predict(X)
