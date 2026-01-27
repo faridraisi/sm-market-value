@@ -18,8 +18,12 @@ Usage:
 """
 
 import argparse
+import os
 import subprocess
 import sys
+
+# Get the directory where this script lives
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def main():
@@ -45,7 +49,7 @@ def main():
     print(f"Step 1: Rebuilding features for sale {args.sale_id}")
     print("=" * 60)
     subprocess.run(
-        [sys.executable, "run_rebuild.py", "--sale-id", str(args.sale_id)],
+        [sys.executable, os.path.join(SCRIPT_DIR, "run_rebuild.py"), "--sale-id", str(args.sale_id)],
         check=True,
     )
 
@@ -56,7 +60,7 @@ def main():
     subprocess.run(
         [
             sys.executable,
-            "score_lots.py",
+            os.path.join(SCRIPT_DIR, "score_lots.py"),
             "--sale-id",
             str(args.sale_id),
             "--output",

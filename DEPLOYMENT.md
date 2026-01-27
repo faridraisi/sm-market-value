@@ -9,25 +9,46 @@
 source .venv/bin/activate
 
 # Output to CSV (default)
-python score_sale.py --sale-id 2094
+python src/score_sale.py --sale-id 2094
 
 # Output directly to database
-python score_sale.py --sale-id 2094 --output db
+python src/score_sale.py --sale-id 2094 --output db
+```
+
+### Run via API Server
+
+```bash
+# Activate environment
+source .venv/bin/activate
+
+# Start the API server
+uvicorn api:app --host 0.0.0.0 --port 8000
+
+# Score a sale (JSON response)
+curl -X POST "http://localhost:8000/api/score/2094" \
+  -H "X-API-Key: your-api-key"
+
+# Score and write to database
+curl -X POST "http://localhost:8000/api/score/2094?output=db" \
+  -H "X-API-Key: your-api-key"
+
+# Health check (no auth)
+curl http://localhost:8000/health
 ```
 
 ### Run Steps Individually
 
 ```bash
 # Step 1: Rebuild features only
-python run_rebuild.py --sale-id 2094
+python src/run_rebuild.py --sale-id 2094
 # Creates: csv/sale_2094_inference.csv
 
 # Step 2: Score lots only
-python score_lots.py --sale-id 2094
+python src/score_lots.py --sale-id 2094
 # Creates: csv/sale_2094_scored.csv
 
 # Step 2 (alternative): Score and write to database
-python score_lots.py --sale-id 2094 --output db
+python src/score_lots.py --sale-id 2094 --output db
 # Updates: tblHorseAnalytics
 ```
 
@@ -73,6 +94,9 @@ YEAR_END=2026
 
 # Audit user ID for database writes (default: 2)
 AUDIT_USER_ID=2
+
+# API authentication (required for API server)
+API_KEY=your-secret-api-key
 ```
 
 ## Output Files

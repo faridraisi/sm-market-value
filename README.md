@@ -19,15 +19,15 @@ source .venv/bin/activate
 
 ```bash
 # Output to CSV (default)
-python score_sale.py --sale-id 2094
+python src/score_sale.py --sale-id 2094
 
 # Output directly to database (tblHorseAnalytics)
-python score_sale.py --sale-id 2094 --output db
+python src/score_sale.py --sale-id 2094 --output db
 ```
 
 This runs two steps automatically:
-1. **Feature rebuild** (`run_rebuild.py`) — Fetches data from database, computes features, outputs `csv/sale_2094_inference.csv`
-2. **Scoring** (`score_lots.py`) — Loads the model, scores lots, outputs to CSV or database
+1. **Feature rebuild** (`src/run_rebuild.py`) — Fetches data from database, computes features, outputs `csv/sale_2094_inference.csv`
+2. **Scoring** (`src/score_lots.py`) — Loads the model, scores lots, outputs to CSV or database
 
 The country is auto-detected from the database, and the correct model is loaded based on `.env` configuration.
 
@@ -47,6 +47,9 @@ YEAR_END=2026
 
 # Database output settings
 AUDIT_USER_ID=2  # User ID for createdBy/modifiedBy fields (default: 2)
+
+# API authentication (required for API server)
+API_KEY=your-secret-api-key
 ```
 
 To use the AUS model for NZL sales (e.g., for cross-country testing):
@@ -54,7 +57,28 @@ To use the AUS model for NZL sales (e.g., for cross-country testing):
 NZL_MODEL=aus
 ```
 
-### 4. View Results
+### 4. Run via API (Optional)
+
+Start the API server:
+```bash
+uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+Score a sale via HTTP:
+```bash
+# Score and return JSON
+curl -X POST "http://localhost:8000/api/score/2094" \
+  -H "X-API-Key: your-api-key"
+
+# Score and write to database
+curl -X POST "http://localhost:8000/api/score/2094?output=db" \
+  -H "X-API-Key: your-api-key"
+
+# Health check (no auth required)
+curl http://localhost:8000/health
+```
+
+### 5. View Results
 
 Output saved to `csv/sale_{sale_id}_scored.csv` with columns:
 
@@ -289,6 +313,12 @@ Follow the Quick Start steps above.
 sm-market-value/
 ├── .venv/                          # Python virtual environment
 ├── .env                            # Database credentials & model config
+├── api.py                          # FastAPI server (main entry point)
+├── src/                            # Core modules
+│   ├── __init__.py
+│   ├── run_rebuild.py              # Feature rebuild
+│   ├── score_lots.py               # Lot scoring
+│   └── score_sale.py               # CLI pipeline orchestrator
 ├── models/
 │   ├── aus/                        # Australia models
 │   │   ├── mv_v1_q25.txt
@@ -304,16 +334,8 @@ sm-market-value/
 │       └── feature_cols.json
 ├── csv/                            # CSV outputs
 │   ├── sale_{id}_inference.csv     # Inference data (step 1)
-│   ├── sale_{id}_scored.csv        # Output predictions (step 2)
-│   ├── feature_importance_aus.csv
-│   └── feature_importance_nzl.csv
+│   └── sale_{id}_scored.csv        # Output predictions (step 2)
 ├── archive/                        # Legacy scripts
-│   └── score_lots.py               # Old standalone scoring script
-├── src/                            # Training scripts
-│   └── train_market_value_model.py
-├── score_sale.py                   # Pipeline orchestrator (run this)
-├── run_rebuild.py                  # Feature rebuild (step 1)
-├── score_lots.py                   # Lot scoring (step 2)
 ├── requirements.txt
 └── README.md
 ```
@@ -412,6 +434,7 @@ Check that `session_median_price` is set in your inference CSV. Future sales req
 
 | Version | Date | Changes |
 |---------|------|---------|
+| V2.2 | Jan 2025 | Added FastAPI endpoint (`POST /api/score/{sale_id}`) for HTTP-based scoring. |
 | V2.1 | Jan 2025 | Added `--output db` option to write predictions directly to `tblHorseAnalytics`. Elite scaling for predictions >= $300k. Price-aware confidence tiers. |
 | V2.0 | Dec 2024 | Initial production release. LightGBM quantile models with calibrated P25/P50/P75 bands. |
 

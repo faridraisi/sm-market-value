@@ -406,6 +406,31 @@ def score_lots(
 # ============================================================================
 
 
+def score_sale_lots(
+    sale_id: int, inference_df: pd.DataFrame = None, output: str = "none"
+) -> pd.DataFrame:
+    """Score lots for a sale. Returns DataFrame with predictions."""
+    conn = get_connection()
+    country_code = fetch_sale_country(conn, sale_id)
+    conn.close()
+
+    model_dir = get_model_dir(country_code)
+    models, offsets, feature_cols = load_models(model_dir)
+
+    if inference_df is None:
+        inference_df = pd.read_csv(f"csv/sale_{sale_id}_inference.csv")
+
+    results = score_lots(inference_df, models, offsets, feature_cols)
+
+    if output == "csv":
+        os.makedirs("csv", exist_ok=True)
+        results.to_csv(f"csv/sale_{sale_id}_scored.csv", index=False)
+    elif output == "db":
+        upsert_to_database(results, country_code)
+
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Score lots for a sale using the market value model."

@@ -438,6 +438,28 @@ def export_inference(df, output_path):
     return output_df
 
 
+def rebuild_sale_features(sale_id: int, export_csv: bool = True) -> pd.DataFrame:
+    """Rebuild features for a sale. Returns DataFrame."""
+    conn = get_connection()
+    country_code = fetch_sale_country(conn, sale_id)
+    hist_countries = get_hist_countries(country_code)
+
+    base_lots = fetch_base_lots(conn, sale_id)
+    if base_lots.empty:
+        conn.close()
+        return base_lots
+
+    hist_lots = fetch_hist_lots(conn, hist_countries)
+    features = build_features(base_lots, hist_lots, conn)
+    conn.close()
+
+    if export_csv:
+        os.makedirs("csv", exist_ok=True)
+        export_inference(features, f"csv/sale_{sale_id}_inference.csv")
+
+    return features
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Run golden table rebuild and export sale inference data."
