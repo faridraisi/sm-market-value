@@ -1,0 +1,93 @@
+{
+	"info": {
+		"name": "sm-market-value",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000"
+		},
+		{
+			"key": "api_key",
+			"value": "your-api-key"
+		}
+	],
+	"item": [
+		{
+			"name": "Health Check",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/health",
+					"host": ["{{base_url}}"],
+					"path": ["health"]
+				}
+			}
+		},
+		{
+			"name": "Score Sale (JSON only)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-Key",
+						"value": "{{api_key}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/score/2094",
+					"host": ["{{base_url}}"],
+					"path": ["api", "score", "2094"]
+				}
+			}
+		},
+		{
+			"name": "Score Sale (CSV output)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-Key",
+						"value": "{{api_key}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/score/2094?output=csv",
+					"host": ["{{base_url}}"],
+					"path": ["api", "score", "2094"],
+					"query": [
+						{
+							"key": "output",
+							"value": "csv"
+						}
+					]
+				}
+			}
+		},
+		{
+			"name": "Score Sale (DB output)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "X-API-Key",
+						"value": "{{api_key}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/api/score/2094?output=db",
+					"host": ["{{base_url}}"],
+					"path": ["api", "score", "2094"],
+					"query": [
+						{
+							"key": "output",
+							"value": "db"
+						}
+					]
+				}
+			}
+		}
+	]
+}
