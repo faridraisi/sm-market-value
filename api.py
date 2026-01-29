@@ -12,7 +12,8 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-from src import rebuild_sale_features, get_connection, fetch_sale_country, score_sale_lots, MODEL_VERSION
+from src import rebuild_sale_features, get_connection, fetch_sale_country, MODEL_VERSION
+from src.score_sale import load_models, get_model_dir, score_lots, upsert_to_database
 
 load_dotenv()
 
@@ -82,11 +83,22 @@ async def score_sale(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
+    # Rebuild features
     features_df = rebuild_sale_features(sale_id, export_csv=(output == "csv"))
     if features_df.empty:
         raise HTTPException(status_code=404, detail=f"No lots found for sale {sale_id}")
 
-    results_df = score_sale_lots(sale_id, features_df, output)
+    # Load models and score
+    model_dir = get_model_dir(country_code)
+    models, offsets, feature_cols = load_models(model_dir)
+    results_df = score_lots(features_df, models, offsets, feature_cols)
+
+    # Handle output
+    if output == "csv":
+        os.makedirs("csv", exist_ok=True)
+        results_df.to_csv(f"csv/sale_{sale_id}_scored.csv", index=False)
+    elif output == "db":
+        upsert_to_database(results_df, country_code)
 
     lots = [
         LotScore(

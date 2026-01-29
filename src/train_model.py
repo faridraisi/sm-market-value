@@ -965,7 +965,7 @@ def train_model(country: str, version: str = None, csv_path: str = None):
     print(f"\nTo activate the new model, update .env:")
     print(f"  {country.upper()}_MODEL={country}_{version}")
     print(f"\nTo test before deploying:")
-    print(f"  python src/score_lots.py --sale-id <SALE_ID>")
+    print(f"  python src/score_sale.py --sale-id <SALE_ID>")
 
 
 def main():

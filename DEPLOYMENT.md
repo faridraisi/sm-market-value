@@ -39,18 +39,12 @@ curl http://localhost:8000/health
 ### Run Steps Individually
 
 ```bash
-# Step 1: Rebuild features only
+# Rebuild features only (no scoring)
 python src/run_rebuild.py --sale-id 2094
 # Creates: csv/sale_2094_inference.csv
-
-# Step 2: Score lots only
-python src/score_lots.py --sale-id 2094
-# Creates: csv/sale_2094_scored.csv
-
-# Step 2 (alternative): Score and write to database
-python src/score_lots.py --sale-id 2094 --output db
-# Updates: tblHorseAnalytics
 ```
+
+Note: `score_sale.py` handles both feature rebuild and scoring in a single command.
 
 ## Setup
 

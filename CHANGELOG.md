@@ -19,6 +19,8 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Model directories now use underscore format (`aus_v2`) instead of hyphen (`aus-v2`)
 - Version detection supports both formats for backward compatibility
+- Merged `score_lots.py` into `score_sale.py` - single script now handles full pipeline
+- Removed `score_lots.py` (scoring logic now in `score_sale.py`)
 
 ## [2.2.0] - 2025-01-27
 

@@ -27,7 +27,7 @@ python src/score_sale.py --sale-id 2094 --output db
 
 This runs two steps automatically:
 1. **Feature rebuild** (`src/run_rebuild.py`) — Fetches data from database, computes features, outputs `csv/sale_2094_inference.csv`
-2. **Scoring** (`src/score_lots.py`) — Loads the model, scores lots, outputs to CSV or database
+2. **Scoring** — Loads the model, scores lots, outputs to CSV or database
 
 The country is auto-detected from the database, and the correct model is loaded based on `.env` configuration.
 
@@ -317,8 +317,7 @@ sm-market-value/
 ├── src/                            # Core modules
 │   ├── __init__.py
 │   ├── run_rebuild.py              # Feature rebuild
-│   ├── score_lots.py               # Lot scoring
-│   ├── score_sale.py               # CLI pipeline orchestrator
+│   ├── score_sale.py               # Score sale pipeline (rebuild + scoring)
 │   └── train_model.py              # Model training with auto-versioning
 ├── models/
 │   ├── aus/                        # Australia models (base)
