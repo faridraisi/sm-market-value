@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.0] - 2025-01-30
+
+### Added
+- **Centralized configuration** - App settings now in `config.json` (runtime-editable), credentials remain in `.env`
+- `src/config.py` - Configuration loader with `Config` singleton and `reload()` method
+- `.env.example` - Template file for credentials
+
+### Added API Endpoints
+- `POST /api/train/{country}` - Train new model (background task)
+- `GET /api/models/{country}` - List all models with training metrics and top features
+- `GET /api/config/models/{country}` - Get active model for country
+- `PUT /api/config/models/{country}` - Set active model for country
+- `GET /api/config/years` - Get year range (year_start, year_end)
+- `PUT /api/config/years` - Set year range
+- `GET /api/config/hist-countries` - Get all historical country mappings
+- `GET /api/config/hist-countries/{country}` - Get historical countries for specific country
+- `PUT /api/config/hist-countries/{country}` - Set historical countries
+- `DELETE /api/config/hist-countries/{country}` - Remove historical country override
+
+### Changed
+- Moved app config from `.env` to `config.json`:
+  - `models` (was `AUS_MODEL`, `NZL_MODEL`, `USA_MODEL`)
+  - `year_start`, `year_end` (was `YEAR_START`, `YEAR_END`)
+  - `audit_user_id` (was `AUDIT_USER_ID`)
+  - `hist_countries` (was `HIST_COUNTRIES_*`)
+  - `currency_map` (new, was hardcoded)
+- `.env` now only contains credentials: `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `API_KEY`
+- Updated `run_rebuild.py`, `score_sale.py`, `train_model.py` to use `config` module
+
 ## [2.3.0] - 2025-01-29
 
 ### Added

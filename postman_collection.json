@@ -15,79 +15,345 @@
 	],
 	"item": [
 		{
-			"name": "Health Check",
-			"request": {
-				"method": "GET",
-				"header": [],
-				"url": {
-					"raw": "{{base_url}}/health",
-					"host": ["{{base_url}}"],
-					"path": ["health"]
-				}
-			}
-		},
-		{
-			"name": "Score Sale (JSON only)",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "X-API-Key",
-						"value": "{{api_key}}"
-					}
-				],
-				"url": {
-					"raw": "{{base_url}}/api/score/2094",
-					"host": ["{{base_url}}"],
-					"path": ["api", "score", "2094"]
-				}
-			}
-		},
-		{
-			"name": "Score Sale (CSV output)",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "X-API-Key",
-						"value": "{{api_key}}"
-					}
-				],
-				"url": {
-					"raw": "{{base_url}}/api/score/2094?output=csv",
-					"host": ["{{base_url}}"],
-					"path": ["api", "score", "2094"],
-					"query": [
-						{
-							"key": "output",
-							"value": "csv"
+			"name": "Health & Scoring",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
 						}
-					]
+					}
+				},
+				{
+					"name": "Score Sale (JSON only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2094",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2094"]
+						}
+					}
+				},
+				{
+					"name": "Score Sale (CSV output)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2094?output=csv",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2094"],
+							"query": [
+								{
+									"key": "output",
+									"value": "csv"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Score Sale (DB output)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2094?output=db",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2094"],
+							"query": [
+								{
+									"key": "output",
+									"value": "db"
+								}
+							]
+						}
+					}
 				}
-			}
+			]
 		},
 		{
-			"name": "Score Sale (DB output)",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "X-API-Key",
-						"value": "{{api_key}}"
-					}
-				],
-				"url": {
-					"raw": "{{base_url}}/api/score/2094?output=db",
-					"host": ["{{base_url}}"],
-					"path": ["api", "score", "2094"],
-					"query": [
-						{
-							"key": "output",
-							"value": "db"
+			"name": "Training",
+			"item": [
+				{
+					"name": "Train Model (auto version)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/train/aus",
+							"host": ["{{base_url}}"],
+							"path": ["api", "train", "aus"]
 						}
-					]
+					}
+				},
+				{
+					"name": "Train Model (specific version)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/train/aus?version=v5",
+							"host": ["{{base_url}}"],
+							"path": ["api", "train", "aus"],
+							"query": [
+								{
+									"key": "version",
+									"value": "v5"
+								}
+							]
+						}
+					}
 				}
-			}
+			]
+		},
+		{
+			"name": "Models",
+			"item": [
+				{
+					"name": "List Models (AUS)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/models/aus",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "aus"]
+						}
+					}
+				},
+				{
+					"name": "List Models (NZL)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/models/nzl",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "nzl"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Config - Models",
+			"item": [
+				{
+					"name": "Get Active Model (AUS)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/models/aus",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "models", "aus"]
+						}
+					}
+				},
+				{
+					"name": "Set Active Model (AUS)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/models/aus?model=aus_v5",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "models", "aus"],
+							"query": [
+								{
+									"key": "model",
+									"value": "aus_v5"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Config - Years",
+			"item": [
+				{
+					"name": "Get Year Range",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/years",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "years"]
+						}
+					}
+				},
+				{
+					"name": "Set Year Range",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/years?year_start=2021&year_end=2026",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "years"],
+							"query": [
+								{
+									"key": "year_start",
+									"value": "2021"
+								},
+								{
+									"key": "year_end",
+									"value": "2026"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Config - Hist Countries",
+			"item": [
+				{
+					"name": "Get All Hist Countries",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/hist-countries",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "hist-countries"]
+						}
+					}
+				},
+				{
+					"name": "Get Hist Countries (NZL)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/hist-countries/NZL",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "hist-countries", "NZL"]
+						}
+					}
+				},
+				{
+					"name": "Set Hist Countries (NZL)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/hist-countries/NZL?hist_countries=NZL&hist_countries=AUS",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "hist-countries", "NZL"],
+							"query": [
+								{
+									"key": "hist_countries",
+									"value": "NZL"
+								},
+								{
+									"key": "hist_countries",
+									"value": "AUS"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Delete Hist Countries (NZL)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/hist-countries/NZL",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "hist-countries", "NZL"]
+						}
+					}
+				}
+			]
 		}
 	]
 }

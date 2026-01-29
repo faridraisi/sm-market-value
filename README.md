@@ -31,30 +31,54 @@ This runs two steps automatically:
 
 The country is auto-detected from the database, and the correct model is loaded based on `.env` configuration.
 
-### 3. Configuration via .env
+### 3. Configuration
 
-Model selection and database output settings in `.env`:
+Configuration is split between two files:
 
+**`.env`** — Credentials (secrets, not committed to git):
 ```bash
-# Model selection
-AUS_MODEL=aus   # Use models/aus/ for Australian sales
-NZL_MODEL=nzl   # Use models/nzl/ for NZ sales
-USA_MODEL=usa   # Use models/usa/ for USA sales
+# Database credentials
+DB_SERVER=127.0.0.1,1433
+DB_NAME=G1StallionMatchProductionV5
+DB_USER=your_user
+DB_PASSWORD=your_password
 
-# Year range for sale queries (default: 2020-2026)
-YEAR_START=2020
-YEAR_END=2026
-
-# Database output settings
-AUDIT_USER_ID=2  # User ID for createdBy/modifiedBy fields (default: 2)
-
-# API authentication (required for API server)
+# API authentication
 API_KEY=your-secret-api-key
 ```
 
-To use the AUS model for NZL sales (e.g., for cross-country testing):
+**`config.json`** — App settings (runtime-editable, committed to git):
+```json
+{
+  "models": {
+    "aus": "aus",
+    "nzl": "nzl",
+    "usa": "usa"
+  },
+  "year_start": 2020,
+  "year_end": 2026,
+  "audit_user_id": 2,
+  "hist_countries": {
+    "NZL": ["NZL", "AUS"]
+  },
+  "currency_map": {
+    "AUS": 1,
+    "NZL": 6,
+    "USA": 7
+  }
+}
+```
+
+To use the AUS model for NZL sales (e.g., for cross-country testing), update `config.json`:
+```json
+"models": {
+  "nzl": "aus"
+}
+```
+
+Or via API:
 ```bash
-NZL_MODEL=aus
+curl -X PUT "http://localhost:8000/api/config/models/nzl?model=aus" -H "X-API-Key: $API_KEY"
 ```
 
 ### 4. Run via API (Optional)
@@ -76,6 +100,40 @@ curl -X POST "http://localhost:8000/api/score/2094?output=db" \
 
 # Health check (no auth required)
 curl http://localhost:8000/health
+```
+
+#### Additional API Endpoints
+
+**Training:**
+```bash
+# Train new model (runs in background)
+curl -X POST "http://localhost:8000/api/train/aus" -H "X-API-Key: $API_KEY"
+
+# Train with specific version
+curl -X POST "http://localhost:8000/api/train/aus?version=v5" -H "X-API-Key: $API_KEY"
+```
+
+**Model Management:**
+```bash
+# List all models for a country (with metrics)
+curl "http://localhost:8000/api/models/aus" -H "X-API-Key: $API_KEY"
+
+# Get active model
+curl "http://localhost:8000/api/config/models/aus" -H "X-API-Key: $API_KEY"
+
+# Set active model
+curl -X PUT "http://localhost:8000/api/config/models/aus?model=aus_v5" -H "X-API-Key: $API_KEY"
+```
+
+**Configuration:**
+```bash
+# Get/set year range
+curl "http://localhost:8000/api/config/years" -H "X-API-Key: $API_KEY"
+curl -X PUT "http://localhost:8000/api/config/years?year_start=2021&year_end=2026" -H "X-API-Key: $API_KEY"
+
+# Get/set historical countries
+curl "http://localhost:8000/api/config/hist-countries" -H "X-API-Key: $API_KEY"
+curl -X PUT "http://localhost:8000/api/config/hist-countries/NZL?hist_countries=NZL&hist_countries=AUS" -H "X-API-Key: $API_KEY"
 ```
 
 ### 5. View Results
@@ -312,10 +370,13 @@ Follow the Quick Start steps above.
 ```
 sm-market-value/
 ├── .venv/                          # Python virtual environment
-├── .env                            # Database credentials & model config
+├── .env                            # Database credentials (secrets)
+├── .env.example                    # Template for .env
+├── config.json                     # App configuration (runtime-editable)
 ├── api.py                          # FastAPI server (main entry point)
 ├── src/                            # Core modules
 │   ├── __init__.py
+│   ├── config.py                   # Configuration loader
 │   ├── run_rebuild.py              # Feature rebuild
 │   ├── score_sale.py               # Score sale pipeline (rebuild + scoring)
 │   └── train_model.py              # Model training with auto-versioning
@@ -401,9 +462,16 @@ The `training_report.txt` includes:
 
 ### Activating New Model
 
-After training, update `.env`:
+After training, update `config.json`:
+```json
+"models": {
+  "aus": "aus_v3"
+}
+```
+
+Or via API:
 ```bash
-AUS_MODEL=aus_v3
+curl -X PUT "http://localhost:8000/api/config/models/aus?model=aus_v3" -H "X-API-Key: $API_KEY"
 ```
 
 ### Manual CSV Export (Alternative)
@@ -468,6 +536,7 @@ Check that `session_median_price` is set in your inference CSV. Future sales req
 
 | Version | Date | Changes |
 |---------|------|---------|
+| V2.4 | Jan 2025 | Centralized config (`config.json` + `.env`). Added API endpoints for training, model listing, and runtime config management. |
 | V2.3 | Jan 2025 | Added `src/train_model.py` with auto-versioning, time-based splits, baseline model comparison, comprehensive training report (`training_report.txt`), and evaluation metrics (MAE/RMSE/R²/MAPE). |
 | V2.2 | Jan 2025 | Added FastAPI endpoint (`POST /api/score/{sale_id}`) for HTTP-based scoring. |
 | V2.1 | Jan 2025 | Added `--output db` option to write predictions directly to `tblHorseAnalytics`. Elite scaling for predictions >= $300k. Price-aware confidence tiers. |

@@ -65,33 +65,43 @@ pip install -r requirements.txt
 
 ### 2. Configure Environment
 
-Create `.env` file with database credentials and settings:
+**Create `.env`** file with database credentials (secrets):
 
 ```bash
-# Database connection
+# Database credentials
 DB_SERVER=your-server
 DB_NAME=G1StallionMatchProductionV5
 DB_USER=your-user
 DB_PASSWORD=your-password
 
-# Model selection (optional - defaults to country code)
-AUS_MODEL=aus
-NZL_MODEL=nzl
-USA_MODEL=usa
-
-# Historical lookback countries (optional)
-HIST_COUNTRIES_NZL=NZL,AUS
-
-# Year range for sale queries (default: 2020-2026)
-YEAR_START=2020
-YEAR_END=2026
-
-# Audit user ID for database writes (default: 2)
-AUDIT_USER_ID=2
-
 # API authentication (required for API server)
 API_KEY=your-secret-api-key
 ```
+
+**Review `config.json`** for app settings (already in repo):
+
+```json
+{
+  "models": {
+    "aus": "aus",
+    "nzl": "nzl",
+    "usa": "usa"
+  },
+  "year_start": 2020,
+  "year_end": 2026,
+  "audit_user_id": 2,
+  "hist_countries": {
+    "NZL": ["NZL", "AUS"]
+  },
+  "currency_map": {
+    "AUS": 1,
+    "NZL": 6,
+    "USA": 7
+  }
+}
+```
+
+Config can be modified at runtime via API or by editing the file directly.
 
 ## Output Files
 

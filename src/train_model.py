@@ -22,7 +22,6 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import pyodbc
-from dotenv import load_dotenv
 from sklearn.linear_model import ElasticNet
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
@@ -35,12 +34,14 @@ try:
         compute_dam_stats,
         compute_vendor_metrics,
     )
+    from src.config import config
 except ModuleNotFoundError:
     from run_rebuild import (
         compute_sire_metrics,
         compute_dam_stats,
         compute_vendor_metrics,
     )
+    from config import config
 
 
 # ============================================================================
@@ -50,22 +51,16 @@ except ModuleNotFoundError:
 
 def get_connection():
     """Create and return a database connection."""
-    load_dotenv()
-
-    server = os.getenv("DB_SERVER")
-    database = os.getenv("DB_NAME")
-    user = os.getenv("DB_USER")
-    password = os.getenv("DB_PASSWORD")
-
-    if not all([server, database, user, password]):
+    db = config.db
+    if not all([db.server, db.name, db.user, db.password]):
         raise ValueError("Missing required database credentials in .env file")
 
     conn_str = (
         f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-        f"SERVER={server};"
-        f"DATABASE={database};"
-        f"UID={user};"
-        f"PWD={password}"
+        f"SERVER={db.server};"
+        f"DATABASE={db.name};"
+        f"UID={db.user};"
+        f"PWD={db.password}"
     )
     return pyodbc.connect(conn_str)
 
@@ -118,8 +113,8 @@ def fetch_training_lots(conn, country: str) -> pd.DataFrame:
 
     Uses read-only SQL queries - no writes to database.
     """
-    year_start = int(os.getenv("YEAR_START", 2020))
-    year_end = int(os.getenv("YEAR_END", 2026))
+    year_start = config.app.year_start
+    year_end = config.app.year_end
 
     query = f"""
     SELECT

@@ -1,0 +1,18 @@
+{
+  "models": {
+    "aus": "aus",
+    "nzl": "nzl",
+    "usa": "usa"
+  },
+  "year_start": 2020,
+  "year_end": 2026,
+  "audit_user_id": 2,
+  "hist_countries": {
+    "NZL": ["NZL", "AUS"]
+  },
+  "currency_map": {
+    "AUS": 1,
+    "NZL": 6,
+    "USA": 7
+  }
+}

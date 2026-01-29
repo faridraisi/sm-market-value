@@ -21,7 +21,6 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 import pyodbc
-from dotenv import load_dotenv
 from sklearn.preprocessing import LabelEncoder
 
 # Import feature rebuild functions
@@ -34,6 +33,7 @@ try:
         fetch_hist_lots,
         build_features,
     )
+    from src.config import config
 except ModuleNotFoundError:
     from run_rebuild import (
         get_connection,
@@ -43,11 +43,9 @@ except ModuleNotFoundError:
         fetch_hist_lots,
         build_features,
     )
+    from config import config
 
 MODEL_VERSION = "v2.1"
-
-# Currency mapping by country code
-CURRENCY_MAP = {"AUS": 1, "NZL": 6, "USA": 7}
 
 
 # ============================================================================
@@ -57,15 +55,12 @@ CURRENCY_MAP = {"AUS": 1, "NZL": 6, "USA": 7}
 
 def get_model_dir(country_code: str) -> str:
     """
-    Get model directory from .env config.
+    Get model directory from config.json.
 
-    Looks for {COUNTRY_CODE}_MODEL in .env (e.g., NZL_MODEL=aus).
+    Uses config.app.models mapping (e.g., {"aus": "aus", "nzl": "nzl"}).
     Falls back to the country code in lowercase if not configured.
     """
-    load_dotenv()
-    env_key = f"{country_code}_MODEL"
-    model_name = os.getenv(env_key, country_code.lower())
-    return f"models/{model_name}"
+    return config.app.get_model_dir(country_code)
 
 
 def load_models(model_dir: str):
@@ -283,8 +278,8 @@ def upsert_to_database(results: pd.DataFrame, country_code: str):
     conn = get_connection()
     cursor = conn.cursor()
 
-    currency_id = CURRENCY_MAP.get(country_code, 1)
-    modified_by = int(os.getenv("AUDIT_USER_ID", 2))
+    currency_id = config.app.currency_map.get(country_code, 1)
+    modified_by = config.app.audit_user_id
 
     inserted = 0
     updated = 0

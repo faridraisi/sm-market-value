@@ -15,27 +15,25 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 import pyodbc
-from dotenv import load_dotenv
+
+try:
+    from src.config import config
+except ModuleNotFoundError:
+    from config import config
 
 
 def get_connection():
     """Create and return a database connection."""
-    load_dotenv()
-
-    server = os.getenv("DB_SERVER")
-    database = os.getenv("DB_NAME")
-    user = os.getenv("DB_USER")
-    password = os.getenv("DB_PASSWORD")
-
-    if not all([server, database, user, password]):
+    db = config.db
+    if not all([db.server, db.name, db.user, db.password]):
         raise ValueError("Missing required database credentials in .env file")
 
     conn_str = (
         f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-        f"SERVER={server};"
-        f"DATABASE={database};"
-        f"UID={user};"
-        f"PWD={password}"
+        f"SERVER={db.server};"
+        f"DATABASE={db.name};"
+        f"UID={db.user};"
+        f"PWD={db.password}"
     )
     return pyodbc.connect(conn_str)
 
@@ -60,20 +58,16 @@ def fetch_sale_country(conn, sale_id):
 def get_hist_countries(country_code):
     """Get list of country codes to include in historical lookback.
 
-    Checks for HIST_COUNTRIES_{country_code} in .env.
+    Checks config.json for hist_countries mapping.
     Falls back to just the sale's country if not configured.
     """
-    env_key = f"HIST_COUNTRIES_{country_code}"
-    override = os.getenv(env_key)
-    if override:
-        return [c.strip() for c in override.split(',')]
-    return [country_code]
+    return config.app.get_hist_countries(country_code)
 
 
 def fetch_base_lots(conn, sale_id):
     """Fetch base lots for the target sale."""
-    year_start = int(os.getenv("YEAR_START", 2020))
-    year_end = int(os.getenv("YEAR_END", 2026))
+    year_start = config.app.year_start
+    year_end = config.app.year_end
 
     query = f"""
     SELECT
