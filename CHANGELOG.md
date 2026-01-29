@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.0] - 2025-01-29
+
+### Added
+- `src/train_model.py` - Automated model training script with:
+  - **Read-only database access** - no writes, no golden table dependency
+  - Feature computation in Python/pandas (same as `run_rebuild.py`)
+  - Auto-versioning (scans `models/` for existing versions, increments automatically)
+  - Time-based data splits (2020-2023 train, 2024+ test)
+  - Elastic Net baseline model for sanity check comparison
+  - Comprehensive evaluation metrics: MAE, RMSE, R², MAPE, coverage
+  - `training_report.txt` saved to model directory with full metrics
+  - Support for both database export and CSV input
+- Training report includes: data summary, baseline comparison, model iterations, evaluation metrics, calibration offsets, feature importance (top 15)
+
+### Changed
+- Model directories now use underscore format (`aus_v2`) instead of hyphen (`aus-v2`)
+- Version detection supports both formats for backward compatibility
+
 ## [2.2.0] - 2025-01-27
 
 ### Added

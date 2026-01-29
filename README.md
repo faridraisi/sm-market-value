@@ -318,20 +318,25 @@ sm-market-value/
 │   ├── __init__.py
 │   ├── run_rebuild.py              # Feature rebuild
 │   ├── score_lots.py               # Lot scoring
-│   └── score_sale.py               # CLI pipeline orchestrator
+│   ├── score_sale.py               # CLI pipeline orchestrator
+│   └── train_model.py              # Model training with auto-versioning
 ├── models/
-│   ├── aus/                        # Australia models
+│   ├── aus/                        # Australia models (base)
 │   │   ├── mv_v1_q25.txt
 │   │   ├── mv_v1_q50.txt
 │   │   ├── mv_v1_q75.txt
 │   │   ├── calibration_offsets.json
 │   │   └── feature_cols.json
+│   ├── aus_v2/                     # Australia models (versioned)
+│   │   ├── mv_v1_q25.txt
+│   │   ├── mv_v1_q50.txt
+│   │   ├── mv_v1_q75.txt
+│   │   ├── calibration_offsets.json
+│   │   ├── feature_cols.json
+│   │   ├── feature_importance_aus_v2.json
+│   │   └── training_report.txt     # Training metrics report
 │   └── nzl/                        # New Zealand models
-│       ├── mv_v1_q25.txt
-│       ├── mv_v1_q50.txt
-│       ├── mv_v1_q75.txt
-│       ├── calibration_offsets.json
-│       └── feature_cols.json
+│       └── ...
 ├── csv/                            # CSV outputs
 │   ├── sale_{id}_inference.csv     # Inference data (step 1)
 │   └── sale_{id}_scored.csv        # Output predictions (step 2)
@@ -344,11 +349,68 @@ sm-market-value/
 
 ## Retraining the Model
 
-If you need to retrain (e.g., with new data or features):
+Use `src/train_model.py` to retrain models with auto-versioning and comprehensive training reports.
 
-### 1. Export training data
+**Database access is read-only** - no writes to database. Features are computed in Python/pandas.
 
-**For AUS:**
+### Quick Start
+
+```bash
+# Retrain from database (recommended)
+python src/train_model.py --country aus
+
+# Or use existing CSV
+python src/train_model.py --country aus --csv training_data.csv
+
+# Force specific version
+python src/train_model.py --country nzl --version v3
+```
+
+### What It Does
+
+1. **Fetches data** via read-only SQL queries (no golden table dependency)
+2. **Computes features** in Python/pandas (sire/dam/vendor metrics, point-in-time)
+3. **Splits data** time-based: 2020-2023 train, 2024+ test
+4. **Trains baseline** (Elastic Net) for sanity check
+5. **Trains quantile models** (Q25, Q50, Q75) with early stopping
+6. **Evaluates** with MAE, RMSE, R², MAPE, coverage metrics
+7. **Calibrates** P25/P75 for exact coverage targets
+8. **Saves artifacts** to versioned directory with training report
+
+### Output Structure
+
+```
+models/aus_v3/
+├── mv_v1_q25.txt              # LightGBM Q25 model
+├── mv_v1_q50.txt              # LightGBM Q50 model
+├── mv_v1_q75.txt              # LightGBM Q75 model
+├── calibration_offsets.json   # Calibration offsets + metadata
+├── feature_cols.json          # Feature column list
+├── feature_importance_aus_v3.json
+└── training_report.txt        # Comprehensive metrics report
+```
+
+### Training Report Contents
+
+The `training_report.txt` includes:
+- **Data summary**: Sample counts, train/val/test splits
+- **Baseline model**: Elastic Net MAE/R² vs naive predictor
+- **Quantile models**: Trees per model (early stopping iterations)
+- **Evaluation**: MAE, RMSE, R², raw coverage, dollar-space MAPE
+- **Calibration**: Offsets and calibrated coverage
+- **Feature importance**: Top 15 features by gain
+
+### Activating New Model
+
+After training, update `.env`:
+```bash
+AUS_MODEL=aus_v3
+```
+
+### Manual CSV Export (Alternative)
+
+If you prefer to export data manually:
+
 ```sql
 SELECT
     lot_id, salesId, sale_company, sale_year, book_number, day_number, sex,
@@ -368,34 +430,7 @@ WHERE isWithdrawn = 0
   AND log_price_index IS NOT NULL;
 ```
 
-Save as `training_data_aus.csv`.
-
-**For NZL:**
-```sql
--- Same query but from NZ table:
-FROM dbo.mv_yearling_lot_features_nz_v1
-```
-
-Save as `training_data_nzl.csv`.
-
-### 2. Update training script
-
-```python
-COUNTRY = "aus"  # or "nzl"
-USE_CSV = True
-CSV_PATH = "training_data_aus.csv"  # or "training_data_nzl.csv"
-```
-
-### 3. Run training
-
-```bash
-source venv/bin/activate
-python3 train_market_value_model.py
-```
-
-### 4. Review results
-
-Check `reports/feature_importance_{country}.csv` and console output for metrics.
+Then run with `--csv` flag.
 
 ---
 
@@ -434,6 +469,7 @@ Check that `session_median_price` is set in your inference CSV. Future sales req
 
 | Version | Date | Changes |
 |---------|------|---------|
+| V2.3 | Jan 2025 | Added `src/train_model.py` with auto-versioning, time-based splits, baseline model comparison, comprehensive training report (`training_report.txt`), and evaluation metrics (MAE/RMSE/R²/MAPE). |
 | V2.2 | Jan 2025 | Added FastAPI endpoint (`POST /api/score/{sale_id}`) for HTTP-based scoring. |
 | V2.1 | Jan 2025 | Added `--output db` option to write predictions directly to `tblHorseAnalytics`. Elite scaling for predictions >= $300k. Price-aware confidence tiers. |
 | V2.0 | Dec 2024 | Initial production release. LightGBM quantile models with calibrated P25/P50/P75 bands. |
