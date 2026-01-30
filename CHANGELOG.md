@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.5.0] - 2025-01-30
+
+### Added
+- **Summary statistics** in `POST /api/score/{sale_id}` response:
+  - `model_dir` - Active model directory used for scoring
+  - `summary.gross` - Sum of low/expected/high prices across all lots
+  - `summary.median_prices` - Median low/expected/high price per lot
+  - `summary.confidence_tiers` - Count of lots by confidence tier (high/medium/low)
+  - `summary.elite_scaling_count` - Number of lots above elite threshold
+  - `summary.elite_scaling_percent` - Percentage of lots above elite threshold
+
 ## [2.4.0] - 2025-01-30
 
 ### Added

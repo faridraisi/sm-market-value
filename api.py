@@ -70,10 +70,32 @@ class LotScore(BaseModel):
     mv_confidence_tier: str
 
 
+class PriceRange(BaseModel):
+    low: float
+    expected: float
+    high: float
+
+
+class ConfidenceTierCounts(BaseModel):
+    high: int
+    medium: int
+    low: int
+
+
+class ScoreSummary(BaseModel):
+    gross: PriceRange
+    median_prices: PriceRange
+    confidence_tiers: ConfidenceTierCounts
+    elite_scaling_count: int
+    elite_scaling_percent: float
+
+
 class ScoreResponse(BaseModel):
     sale_id: int
     country_code: str
+    model_dir: str
     total_lots: int
+    summary: ScoreSummary
     lots: list[LotScore]
     output_written: Optional[str] = None
 
@@ -231,6 +253,36 @@ async def score_sale(
     elif output == "db":
         upsert_to_database(results_df, country_code)
 
+    # Compute summary statistics
+    gross = PriceRange(
+        low=float(results_df["mv_low_price"].sum()),
+        expected=float(results_df["mv_expected_price"].sum()),
+        high=float(results_df["mv_high_price"].sum()),
+    )
+    median_prices = PriceRange(
+        low=float(results_df["mv_low_price"].median()),
+        expected=float(results_df["mv_expected_price"].median()),
+        high=float(results_df["mv_high_price"].median()),
+    )
+    tier_counts = results_df["mv_confidence_tier"].value_counts()
+    confidence_tiers = ConfidenceTierCounts(
+        high=int(tier_counts.get("high", 0)),
+        medium=int(tier_counts.get("medium", 0)),
+        low=int(tier_counts.get("low", 0)),
+    )
+    # Elite scaling: count lots where mv_expected_price >= threshold
+    elite_threshold = offsets.get("elite_scaling", {}).get("threshold", 300000)
+    elite_count = int((results_df["mv_expected_price"] >= elite_threshold).sum())
+    elite_percent = round(100.0 * elite_count / len(results_df), 2) if len(results_df) > 0 else 0.0
+
+    summary = ScoreSummary(
+        gross=gross,
+        median_prices=median_prices,
+        confidence_tiers=confidence_tiers,
+        elite_scaling_count=elite_count,
+        elite_scaling_percent=elite_percent,
+    )
+
     lots = [
         LotScore(
             lot_id=int(row["lot_id"]),
@@ -251,7 +303,9 @@ async def score_sale(
     return ScoreResponse(
         sale_id=sale_id,
         country_code=country_code,
+        model_dir=model_dir,
         total_lots=len(lots),
+        summary=summary,
         lots=lots,
         output_written=output if output != "none" else None,
     )
