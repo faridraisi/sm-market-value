@@ -27,10 +27,16 @@ class DatabaseCredentials:
 class AppConfig:
     models: dict[str, str]
     year_start: int
-    year_end: int
+    year_end: int | None
+    model_test_last_years: int
     audit_user_id: int
     hist_countries: dict[str, list[str]]
     currency_map: dict[str, int]
+
+    def get_year_end(self) -> int:
+        """Get year_end - uses current year if None."""
+        from datetime import datetime
+        return self.year_end if self.year_end is not None else datetime.now().year
 
     def get_model_dir(self, country: str) -> str:
         """Get model directory for a country."""

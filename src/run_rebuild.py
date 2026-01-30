@@ -67,7 +67,7 @@ def get_hist_countries(country_code):
 def fetch_base_lots(conn, sale_id):
     """Fetch base lots for the target sale."""
     year_start = config.app.year_start
-    year_end = config.app.year_end
+    year_end = config.app.get_year_end()
 
     query = f"""
     SELECT

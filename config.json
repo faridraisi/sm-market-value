@@ -5,7 +5,8 @@
     "usa": "usa"
   },
   "year_start": 2020,
-  "year_end": 2026,
+  "year_end": null,
+  "model_test_last_years": 2,
   "audit_user_id": 2,
   "hist_countries": {
     "NZL": ["NZL", "AUS"]

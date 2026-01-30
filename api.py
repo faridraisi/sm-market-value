@@ -90,15 +90,64 @@ class TrainResponse(BaseModel):
     output_dir: str
 
 
+class DataSummary(BaseModel):
+    total_samples: Optional[int] = None
+    train_rows: Optional[int] = None
+    validation_rows: Optional[int] = None
+    test_rows: Optional[int] = None
+    features_count: Optional[int] = None
+
+
+class BaselineModel(BaseModel):
+    name: str = "Elastic Net"
+    train_mae: Optional[float] = None
+    train_r2: Optional[float] = None
+    test_mae: Optional[float] = None
+    test_r2: Optional[float] = None
+    naive_mae: Optional[float] = None
+    passes: Optional[bool] = None
+
+
+class QuantileModels(BaseModel):
+    q25_trees: Optional[int] = None
+    q50_trees: Optional[int] = None
+    q75_trees: Optional[int] = None
+
+
+class Evaluation(BaseModel):
+    p50_mae: Optional[float] = None
+    p50_rmse: Optional[float] = None
+    p50_r2: Optional[float] = None
+    raw_coverage_p25: Optional[float] = None
+    raw_coverage_p75: Optional[float] = None
+    mape: Optional[float] = None
+
+
+class Calibration(BaseModel):
+    offset_p25: Optional[float] = None
+    offset_p75: Optional[float] = None
+    calibrated_coverage_p25: Optional[float] = None
+    calibrated_coverage_p75: Optional[float] = None
+
+
+class FeatureImportance(BaseModel):
+    average: Optional[dict[str, float]] = None
+    q25: Optional[dict[str, float]] = None
+    q50: Optional[dict[str, float]] = None
+    q75: Optional[dict[str, float]] = None
+
+
 class ModelInfo(BaseModel):
     version: str
     directory: str
     is_active: bool
-    training_date: Optional[str] = None
-    test_mae: Optional[float] = None
-    test_r2: Optional[float] = None
-    mape: Optional[float] = None
-    top_features: Optional[list[str]] = None
+    training_info: Optional[dict] = None
+    data_summary: Optional[DataSummary] = None
+    baseline_model: Optional[BaselineModel] = None
+    quantile_models: Optional[QuantileModels] = None
+    evaluation: Optional[Evaluation] = None
+    calibration: Optional[Calibration] = None
+    feature_importance: Optional[FeatureImportance] = None
 
 
 class ModelsListResponse(BaseModel):
@@ -112,9 +161,17 @@ class ModelConfigResponse(BaseModel):
     model: str
 
 
+class AllModelsConfigResponse(BaseModel):
+    models: dict[str, str]
+
+
 class YearsConfigResponse(BaseModel):
     year_start: int
     year_end: int
+
+
+class TestYearsConfigResponse(BaseModel):
+    model_test_last_years: int
 
 
 class HistCountriesResponse(BaseModel):
@@ -250,45 +307,152 @@ async def train_model_endpoint(
 
 
 def parse_training_report(report_path: Path) -> dict:
-    """Parse training_report.txt for key metrics."""
+    """Parse complete training_report.txt for all metrics."""
     if not report_path.exists():
         return {}
 
     content = report_path.read_text()
-    result = {}
+    result = {
+        "training_info": {},
+        "data_summary": {},
+        "baseline_model": {},
+        "quantile_models": {},
+        "evaluation": {},
+        "calibration": {},
+    }
 
-    # Extract date
-    date_match = re.search(r"Generated:\s*(\d{4}-\d{2}-\d{2})", content)
+    # Training info
+    date_match = re.search(r"Generated:\s*(\d{4}-\d{2}-\d{2}\s*\d{2}:\d{2}:\d{2})", content)
     if date_match:
-        result["training_date"] = date_match.group(1)
+        result["training_info"]["generated_at"] = date_match.group(1)
 
-    # Extract test metrics
-    mae_match = re.search(r"Test MAE:\s*([\d.]+)", content)
-    if mae_match:
-        result["test_mae"] = float(mae_match.group(1))
+    version_match = re.search(r"Model Version:\s*(\w+)", content)
+    if version_match:
+        result["training_info"]["model_version"] = version_match.group(1)
 
-    r2_match = re.search(r"Test R²:\s*([\d.]+)", content)
-    if r2_match:
-        result["test_r2"] = float(r2_match.group(1))
+    country_match = re.search(r"Country:\s*(\w+)", content)
+    if country_match:
+        result["training_info"]["country"] = country_match.group(1)
 
-    mape_match = re.search(r"Dollar MAPE:\s*([\d.]+)%", content)
+    # Data summary
+    total_match = re.search(r"Total samples:\s*([\d,]+)", content)
+    if total_match:
+        result["data_summary"]["total_samples"] = int(total_match.group(1).replace(",", ""))
+
+    train_match = re.search(r"Train:\s*([\d,]+)\s*rows", content)
+    if train_match:
+        result["data_summary"]["train_rows"] = int(train_match.group(1).replace(",", ""))
+
+    val_match = re.search(r"Validation:\s*([\d,]+)\s*rows", content)
+    if val_match:
+        result["data_summary"]["validation_rows"] = int(val_match.group(1).replace(",", ""))
+
+    test_rows_match = re.search(r"Test:\s*([\d,]+)\s*rows", content)
+    if test_rows_match:
+        result["data_summary"]["test_rows"] = int(test_rows_match.group(1).replace(",", ""))
+
+    features_match = re.search(r"Features:\s*(\d+)", content)
+    if features_match:
+        result["data_summary"]["features_count"] = int(features_match.group(1))
+
+    # Baseline model
+    result["baseline_model"]["name"] = "Elastic Net"
+
+    train_mae_match = re.search(r"Train MAE:\s*([\d.]+)", content)
+    if train_mae_match:
+        result["baseline_model"]["train_mae"] = float(train_mae_match.group(1))
+
+    train_r2_match = re.search(r"Train R²:\s*([\d.]+)", content)
+    if train_r2_match:
+        result["baseline_model"]["train_r2"] = float(train_r2_match.group(1))
+
+    test_mae_match = re.search(r"Test MAE:\s*([\d.]+)", content)
+    if test_mae_match:
+        result["baseline_model"]["test_mae"] = float(test_mae_match.group(1))
+
+    test_r2_match = re.search(r"Test R²:\s*([\d.]+)", content)
+    if test_r2_match:
+        result["baseline_model"]["test_r2"] = float(test_r2_match.group(1))
+
+    naive_mae_match = re.search(r"Naive MAE:\s*([\d.]+)", content)
+    if naive_mae_match:
+        result["baseline_model"]["naive_mae"] = float(naive_mae_match.group(1))
+
+    result["baseline_model"]["passes"] = "✓ Baseline passes" in content
+
+    # Quantile models
+    q25_match = re.search(r"Q25:\s*(\d+)\s*trees", content)
+    if q25_match:
+        result["quantile_models"]["q25_trees"] = int(q25_match.group(1))
+
+    q50_match = re.search(r"Q50:\s*(\d+)\s*trees", content)
+    if q50_match:
+        result["quantile_models"]["q50_trees"] = int(q50_match.group(1))
+
+    q75_match = re.search(r"Q75:\s*(\d+)\s*trees", content)
+    if q75_match:
+        result["quantile_models"]["q75_trees"] = int(q75_match.group(1))
+
+    # Evaluation - P50 metrics
+    p50_mae_match = re.search(r"P50.*?MAE:\s*([\d.]+)", content, re.DOTALL)
+    if p50_mae_match:
+        result["evaluation"]["p50_mae"] = float(p50_mae_match.group(1))
+
+    p50_rmse_match = re.search(r"RMSE:\s*([\d.]+)", content)
+    if p50_rmse_match:
+        result["evaluation"]["p50_rmse"] = float(p50_rmse_match.group(1))
+
+    p50_r2_match = re.search(r"P50.*?R²:\s*([\d.]+)", content, re.DOTALL)
+    if p50_r2_match:
+        result["evaluation"]["p50_r2"] = float(p50_r2_match.group(1))
+
+    raw_p25_match = re.search(r"% below P25:\s*([\d.]+)%", content)
+    if raw_p25_match:
+        result["evaluation"]["raw_coverage_p25"] = float(raw_p25_match.group(1))
+
+    raw_p75_match = re.search(r"% below P75:\s*([\d.]+)%", content)
+    if raw_p75_match:
+        result["evaluation"]["raw_coverage_p75"] = float(raw_p75_match.group(1))
+
+    mape_match = re.search(r"MAPE:\s*([\d.]+)%", content)
     if mape_match:
-        result["mape"] = float(mape_match.group(1))
+        result["evaluation"]["mape"] = float(mape_match.group(1))
+
+    # Calibration
+    offset_p25_match = re.search(r"P25:\s*(-?[\d.]+)\s*\n", content)
+    if offset_p25_match:
+        result["calibration"]["offset_p25"] = float(offset_p25_match.group(1))
+
+    offset_p75_match = re.search(r"P75:\s*(-?[\d.]+)\s*\n", content)
+    if offset_p75_match:
+        result["calibration"]["offset_p75"] = float(offset_p75_match.group(1))
+
+    cal_p25_match = re.search(r"Calibrated.*?% below P25:\s*([\d.]+)%", content, re.DOTALL)
+    if cal_p25_match:
+        result["calibration"]["calibrated_coverage_p25"] = float(cal_p25_match.group(1))
+
+    cal_p75_match = re.search(r"Calibrated.*?% below P75:\s*([\d.]+)%", content, re.DOTALL)
+    if cal_p75_match:
+        result["calibration"]["calibrated_coverage_p75"] = float(cal_p75_match.group(1))
 
     return result
 
 
-def parse_feature_importance(importance_path: Path, top_n: int = 5) -> list[str]:
-    """Get top N features from feature_importance JSON."""
+def parse_feature_importance(importance_path: Path) -> dict:
+    """Get complete feature importance from JSON."""
     if not importance_path.exists():
-        return []
+        return {}
 
     with open(importance_path) as f:
         data = json.load(f)
 
-    avg_importance = data.get("average", {})
-    sorted_features = sorted(avg_importance.items(), key=lambda x: x[1], reverse=True)
-    return [f[0] for f in sorted_features[:top_n]]
+    # Round values for cleaner output
+    return {
+        "average": {k: round(v, 2) for k, v in data.get("average", {}).items()},
+        "q25": {k: round(v, 2) for k, v in data.get("q25", {}).items()},
+        "q50": {k: round(v, 2) for k, v in data.get("q50", {}).items()},
+        "q75": {k: round(v, 2) for k, v in data.get("q75", {}).items()},
+    }
 
 
 @app.get("/api/models/{country}", response_model=ModelsListResponse)
@@ -333,19 +497,44 @@ async def list_models(
 
             # Parse feature importance
             importance_files = list(entry.glob("feature_importance_*.json"))
-            top_features = []
+            feature_importance = None
             if importance_files:
-                top_features = parse_feature_importance(importance_files[0])
+                fi_data = parse_feature_importance(importance_files[0])
+                if fi_data:
+                    feature_importance = FeatureImportance(**fi_data)
+
+            # Build structured response
+            data_summary = None
+            if report_data.get("data_summary"):
+                data_summary = DataSummary(**report_data["data_summary"])
+
+            baseline_model = None
+            if report_data.get("baseline_model"):
+                baseline_model = BaselineModel(**report_data["baseline_model"])
+
+            quantile_models = None
+            if report_data.get("quantile_models"):
+                quantile_models = QuantileModels(**report_data["quantile_models"])
+
+            evaluation = None
+            if report_data.get("evaluation"):
+                evaluation = Evaluation(**report_data["evaluation"])
+
+            calibration = None
+            if report_data.get("calibration"):
+                calibration = Calibration(**report_data["calibration"])
 
             model_infos.append(ModelInfo(
                 version=version,
                 directory=entry.name,
                 is_active=is_active,
-                training_date=report_data.get("training_date"),
-                test_mae=report_data.get("test_mae"),
-                test_r2=report_data.get("test_r2"),
-                mape=report_data.get("mape"),
-                top_features=top_features if top_features else None,
+                training_info=report_data.get("training_info") or None,
+                data_summary=data_summary,
+                baseline_model=baseline_model,
+                quantile_models=quantile_models,
+                evaluation=evaluation,
+                calibration=calibration,
+                feature_importance=feature_importance,
             ))
 
     if not model_infos:
@@ -363,18 +552,12 @@ async def list_models(
 # ============================================================================
 
 
-@app.get("/api/config/models/{country}", response_model=ModelConfigResponse)
-async def get_model_config(
-    country: str,
+@app.get("/api/config/models", response_model=AllModelsConfigResponse)
+async def get_all_model_configs(
     api_key: str = Security(verify_api_key),
 ):
-    """Get the active model for a country."""
-    country = country.lower()
-    if country not in ["aus", "nzl", "usa"]:
-        raise HTTPException(status_code=400, detail=f"Invalid country: {country}. Must be aus, nzl, or usa.")
-
-    model = config.app.models.get(country, country)
-    return ModelConfigResponse(country=country.upper(), model=model)
+    """Get active models for all countries."""
+    return AllModelsConfigResponse(models=config.app.models)
 
 
 @app.put("/api/config/models/{country}", response_model=ModelConfigResponse)
@@ -414,29 +597,51 @@ async def set_model_config(
 async def get_years_config(
     api_key: str = Security(verify_api_key),
 ):
-    """Get the year range for training/scoring."""
+    """Get the year range for training/scoring. year_end uses current year if not set."""
     return YearsConfigResponse(
         year_start=config.app.year_start,
-        year_end=config.app.year_end,
+        year_end=config.app.get_year_end(),
     )
 
 
 @app.put("/api/config/years", response_model=YearsConfigResponse)
 async def set_years_config(
     year_start: int = Query(..., ge=2000, le=2100, description="Start year"),
-    year_end: int = Query(..., ge=2000, le=2100, description="End year"),
+    year_end: Optional[int] = Query(default=None, ge=2000, le=2100, description="End year (null = current year)"),
     api_key: str = Security(verify_api_key),
 ):
-    """Set the year range for training/scoring."""
-    if year_start > year_end:
+    """Set the year range for training/scoring. Set year_end to null to use current year."""
+    effective_year_end = year_end if year_end is not None else config.app.get_year_end()
+    if year_start > effective_year_end:
         raise HTTPException(status_code=400, detail="year_start must be <= year_end")
 
     data = load_config_json()
     data["year_start"] = year_start
-    data["year_end"] = year_end
+    data["year_end"] = year_end  # Can be null
     save_config_json(data)
 
-    return YearsConfigResponse(year_start=year_start, year_end=year_end)
+    return YearsConfigResponse(year_start=year_start, year_end=effective_year_end)
+
+
+@app.get("/api/config/test-years", response_model=TestYearsConfigResponse)
+async def get_test_years_config(
+    api_key: str = Security(verify_api_key),
+):
+    """Get model_test_last_years - number of years to hold out for testing."""
+    return TestYearsConfigResponse(model_test_last_years=config.app.model_test_last_years)
+
+
+@app.put("/api/config/test-years", response_model=TestYearsConfigResponse)
+async def set_test_years_config(
+    model_test_last_years: int = Query(..., ge=1, le=10, description="Number of years to hold out for testing"),
+    api_key: str = Security(verify_api_key),
+):
+    """Set model_test_last_years - number of years to hold out for testing."""
+    data = load_config_json()
+    data["model_test_last_years"] = model_test_last_years
+    save_config_json(data)
+
+    return TestYearsConfigResponse(model_test_last_years=model_test_last_years)
 
 
 # ============================================================================

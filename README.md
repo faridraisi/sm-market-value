@@ -56,7 +56,8 @@ API_KEY=your-secret-api-key
     "usa": "usa"
   },
   "year_start": 2020,
-  "year_end": 2026,
+  "year_end": null,
+  "model_test_last_years": 2,
   "audit_user_id": 2,
   "hist_countries": {
     "NZL": ["NZL", "AUS"]
@@ -67,6 +68,9 @@ API_KEY=your-secret-api-key
     "USA": 7
   }
 }
+```
+
+**Note:** `year_end: null` uses the current year automatically. Set to a specific year (e.g., `2027`) for future sales.
 ```
 
 To use the AUS model for NZL sales (e.g., for cross-country testing), update `config.json`:
@@ -118,18 +122,23 @@ curl -X POST "http://localhost:8000/api/train/aus?version=v5" -H "X-API-Key: $AP
 # List all models for a country (with metrics)
 curl "http://localhost:8000/api/models/aus" -H "X-API-Key: $API_KEY"
 
-# Get active model
-curl "http://localhost:8000/api/config/models/aus" -H "X-API-Key: $API_KEY"
+# Get active models (all countries)
+curl "http://localhost:8000/api/config/models" -H "X-API-Key: $API_KEY"
 
-# Set active model
+# Set active model for a country
 curl -X PUT "http://localhost:8000/api/config/models/aus?model=aus_v5" -H "X-API-Key: $API_KEY"
 ```
 
 **Configuration:**
 ```bash
-# Get/set year range
+# Get/set year range (year_end optional - omit to use current year)
 curl "http://localhost:8000/api/config/years" -H "X-API-Key: $API_KEY"
-curl -X PUT "http://localhost:8000/api/config/years?year_start=2021&year_end=2026" -H "X-API-Key: $API_KEY"
+curl -X PUT "http://localhost:8000/api/config/years?year_start=2020" -H "X-API-Key: $API_KEY"
+curl -X PUT "http://localhost:8000/api/config/years?year_start=2020&year_end=2027" -H "X-API-Key: $API_KEY"
+
+# Get/set test years (for train/test split)
+curl "http://localhost:8000/api/config/test-years" -H "X-API-Key: $API_KEY"
+curl -X PUT "http://localhost:8000/api/config/test-years?model_test_last_years=2" -H "X-API-Key: $API_KEY"
 
 # Get/set historical countries
 curl "http://localhost:8000/api/config/hist-countries" -H "X-API-Key: $API_KEY"

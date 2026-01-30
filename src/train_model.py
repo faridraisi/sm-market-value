@@ -114,7 +114,7 @@ def fetch_training_lots(conn, country: str) -> pd.DataFrame:
     Uses read-only SQL queries - no writes to database.
     """
     year_start = config.app.year_start
-    year_end = config.app.year_end
+    year_end = config.app.get_year_end()
 
     query = f"""
     SELECT
@@ -808,17 +808,21 @@ def split_data_time_based(
     X: pd.DataFrame, y: pd.Series, df: pd.DataFrame
 ) -> tuple:
     """
-    Split data using time-based approach: 2020-2023 train, 2024+ test.
+    Split data using time-based approach based on config settings.
 
+    Uses model_test_last_years from config to determine test set.
     Falls back to random split if sale_year column doesn't exist.
 
     Returns:
         Tuple of (X_train, X_val, X_test, y_train, y_val, y_test, df_test, split_type)
     """
     if "sale_year" in df.columns:
-        # Time-based split
-        train_mask = df["sale_year"] < 2024
-        test_mask = df["sale_year"] >= 2024
+        # Time-based split using config
+        year_end = config.app.get_year_end()
+        cutoff_year = year_end - config.app.model_test_last_years + 1
+
+        train_mask = df["sale_year"] < cutoff_year
+        test_mask = df["sale_year"] >= cutoff_year
 
         X_train_full = X[train_mask]
         y_train_full = y[train_mask]
@@ -831,8 +835,8 @@ def split_data_time_based(
             X_train_full, y_train_full, test_size=0.1, random_state=42
         )
 
-        split_type = "time-based (2020-2023 train, 2024+ test)"
-        print(f"  Using time-based split: train years < 2024, test years >= 2024")
+        split_type = f"time-based ({config.app.year_start}-{cutoff_year-1} train, {cutoff_year}-{year_end} test)"
+        print(f"  Using time-based split: train years < {cutoff_year}, test years >= {cutoff_year}")
     else:
         # Fall back to random split
         X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(

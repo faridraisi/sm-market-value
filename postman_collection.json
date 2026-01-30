@@ -182,7 +182,7 @@
 			"name": "Config - Models",
 			"item": [
 				{
-					"name": "Get Active Model (AUS)",
+					"name": "Get All Active Models",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -192,9 +192,9 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/config/models/aus",
+							"raw": "{{base_url}}/api/config/models",
 							"host": ["{{base_url}}"],
-							"path": ["api", "config", "models", "aus"]
+							"path": ["api", "config", "models"]
 						}
 					}
 				},
@@ -244,7 +244,7 @@
 					}
 				},
 				{
-					"name": "Set Year Range",
+					"name": "Set Year Start (year_end=current)",
 					"request": {
 						"method": "PUT",
 						"header": [
@@ -254,17 +254,85 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/config/years?year_start=2021&year_end=2026",
+							"raw": "{{base_url}}/api/config/years?year_start=2020",
 							"host": ["{{base_url}}"],
 							"path": ["api", "config", "years"],
 							"query": [
 								{
 									"key": "year_start",
-									"value": "2021"
+									"value": "2020"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Set Year Range (fixed year_end)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/years?year_start=2020&year_end=2027",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "years"],
+							"query": [
+								{
+									"key": "year_start",
+									"value": "2020"
 								},
 								{
 									"key": "year_end",
-									"value": "2026"
+									"value": "2027"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Config - Test Years",
+			"item": [
+				{
+					"name": "Get Test Years",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/test-years",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "test-years"]
+						}
+					}
+				},
+				{
+					"name": "Set Test Years",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/test-years?model_test_last_years=2",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "test-years"],
+							"query": [
+								{
+									"key": "model_test_last_years",
+									"value": "2"
 								}
 							]
 						}

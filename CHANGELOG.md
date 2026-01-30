@@ -12,10 +12,12 @@ All notable changes to this project will be documented in this file.
 ### Added API Endpoints
 - `POST /api/train/{country}` - Train new model (background task)
 - `GET /api/models/{country}` - List all models with training metrics and top features
-- `GET /api/config/models/{country}` - Get active model for country
+- `GET /api/config/models` - Get active models for all countries
 - `PUT /api/config/models/{country}` - Set active model for country
 - `GET /api/config/years` - Get year range (year_start, year_end)
-- `PUT /api/config/years` - Set year range
+- `PUT /api/config/years` - Set year range (year_end optional, null = current year)
+- `GET /api/config/test-years` - Get model_test_last_years
+- `PUT /api/config/test-years` - Set model_test_last_years
 - `GET /api/config/hist-countries` - Get all historical country mappings
 - `GET /api/config/hist-countries/{country}` - Get historical countries for specific country
 - `PUT /api/config/hist-countries/{country}` - Set historical countries
@@ -30,6 +32,9 @@ All notable changes to this project will be documented in this file.
   - `currency_map` (new, was hardcoded)
 - `.env` now only contains credentials: `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `API_KEY`
 - Updated `run_rebuild.py`, `score_sale.py`, `train_model.py` to use `config` module
+- **Dynamic year_end** - `year_end: null` in config uses current year automatically; set to specific year for future sales
+- **Configurable train/test split** - Added `model_test_last_years` to control test set size (e.g., `2` = last 2 years as test)
+- Train/test split now derived from config instead of hardcoded 2024 threshold
 
 ## [2.3.0] - 2025-01-29
 
