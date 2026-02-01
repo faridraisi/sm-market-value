@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Security, Query, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -23,6 +26,15 @@ from src.config import config, CONFIG_PATH
 load_dotenv()
 
 app = FastAPI(title="Market Value API", version=MODEL_VERSION)
+
+# CORS middleware for local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Auth
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
@@ -765,6 +777,17 @@ async def delete_hist_countries_config(
         return {"message": f"Removed hist_countries override for {country}"}
 
     return {"message": f"No override existed for {country}"}
+
+
+# ============================================================================
+# UI
+# ============================================================================
+
+
+@app.get("/", response_class=FileResponse)
+async def serve_ui():
+    """Serve the local UI."""
+    return FileResponse("ui.html")
 
 
 if __name__ == "__main__":
