@@ -273,8 +273,13 @@ def score_lots(
 # ============================================================================
 
 
-def upsert_to_database(results: pd.DataFrame, country_code: str):
-    """Insert/update market value predictions to tblHorseAnalytics."""
+def upsert_to_database(results: pd.DataFrame, country_code: str) -> tuple[int, int]:
+    """
+    Insert/update market value predictions to tblHorseAnalytics.
+
+    Returns:
+        Tuple of (inserted_count, updated_count)
+    """
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -350,6 +355,8 @@ def upsert_to_database(results: pd.DataFrame, country_code: str):
     print(f"\nDatabase update complete:")
     print(f"  Inserted: {inserted}")
     print(f"  Updated:  {updated}")
+
+    return inserted, updated
 
 
 # ============================================================================

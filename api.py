@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from typing import Literal, Optional
 
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Security, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
@@ -79,6 +80,7 @@ class LotScore(BaseModel):
     mv_expected_price: float
     mv_low_price: float
     mv_high_price: float
+    mv_expected_index: float
     mv_confidence_tier: str
 
 
@@ -110,6 +112,29 @@ class ScoreResponse(BaseModel):
     summary: ScoreSummary
     lots: list[LotScore]
     output_written: Optional[str] = None
+
+
+class LotCommit(BaseModel):
+    horse_id: int
+    sales_id: int
+    mv_expected_price: float
+    mv_low_price: float
+    mv_high_price: float
+    mv_expected_index: float
+    mv_confidence_tier: str
+    session_median_price: float
+
+
+class CommitLotsRequest(BaseModel):
+    lots: list[LotCommit]
+
+
+class CommitLotsResponse(BaseModel):
+    sale_id: int
+    country_code: str
+    inserted: int
+    updated: int
+    total: int
 
 
 class HealthResponse(BaseModel):
@@ -307,6 +332,7 @@ async def score_sale(
             mv_expected_price=float(row["mv_expected_price"]),
             mv_low_price=float(row["mv_low_price"]),
             mv_high_price=float(row["mv_high_price"]),
+            mv_expected_index=float(row["mv_expected_index"]),
             mv_confidence_tier=row["mv_confidence_tier"],
         )
         for _, row in results_df.iterrows()
@@ -320,6 +346,64 @@ async def score_sale(
         summary=summary,
         lots=lots,
         output_written=output if output != "none" else None,
+    )
+
+
+@app.post("/api/score/{sale_id}/commit", response_model=CommitLotsResponse)
+async def commit_lots(
+    sale_id: int,
+    request: CommitLotsRequest,
+    api_key: str = Security(verify_api_key),
+):
+    """
+    Commit selected lots to database.
+
+    Use this endpoint after scoring to selectively persist predictions.
+    The lots must have been scored for the specified sale_id.
+    """
+    if not request.lots:
+        raise HTTPException(status_code=400, detail="No lots provided")
+
+    # Validate all lots have sales_id matching path param
+    for lot in request.lots:
+        if lot.sales_id != sale_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Lot sales_id {lot.sales_id} does not match path sale_id {sale_id}",
+            )
+
+    # Get country_code from sale_id
+    try:
+        conn = get_connection()
+        country_code = fetch_sale_country(conn, sale_id)
+        conn.close()
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    # Convert lots to DataFrame with expected column names
+    results_df = pd.DataFrame([
+        {
+            "horseId": lot.horse_id,
+            "salesId": lot.sales_id,
+            "mv_expected_price": lot.mv_expected_price,
+            "mv_low_price": lot.mv_low_price,
+            "mv_high_price": lot.mv_high_price,
+            "mv_expected_index": lot.mv_expected_index,
+            "mv_confidence_tier": lot.mv_confidence_tier,
+            "session_median_price": lot.session_median_price,
+        }
+        for lot in request.lots
+    ])
+
+    # Upsert to database
+    inserted, updated = upsert_to_database(results_df, country_code)
+
+    return CommitLotsResponse(
+        sale_id=sale_id,
+        country_code=country_code,
+        inserted=inserted,
+        updated=updated,
+        total=inserted + updated,
     )
 
 

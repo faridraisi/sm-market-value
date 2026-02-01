@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.6.0] - 2026-02-02
+
+### Added
+- **Selective lot commit endpoint** `POST /api/score/{sale_id}/commit`
+  - Two-step workflow: score sale → select lots in UI → commit only selected to DB
+  - Returns insert/update counts for feedback
+  - Validates `sales_id` in each lot matches path parameter
+- `mv_expected_index` field added to `LotScore` response (price multiplier vs session median)
+
+### Changed
+- `upsert_to_database()` now returns `tuple[int, int]` (inserted, updated) counts
+
 ## [2.5.0] - 2025-01-30
 
 ### Added

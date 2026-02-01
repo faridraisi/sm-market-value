@@ -3,7 +3,7 @@
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
 **Base URL:** `http://localhost:8000` (development) or your production server
-**API Version:** 2.5.0
+**API Version:** 2.6.0
 
 ---
 
@@ -59,6 +59,7 @@ API_KEY=your_api_key
 |--------|----------|------|-------------|
 | `GET` | `/health` | No | Health check |
 | `POST` | `/api/score/{sale_id}` | Yes | Score all lots for a sale |
+| `POST` | `/api/score/{sale_id}/commit` | Yes | Commit selected lots to database |
 | `POST` | `/api/train/{country}` | Yes | Train new model (background) |
 | `GET` | `/api/models/{country}` | Yes | List all models for country |
 | `GET` | `/api/config/models` | Yes | Get active models |
@@ -157,6 +158,7 @@ POST /api/score/{sale_id}
       "mv_expected_price": 120000,
       "mv_low_price": 75000,
       "mv_high_price": 195000,
+      "mv_expected_index": 1.41,
       "mv_confidence_tier": "medium"
     }
   ],
@@ -194,6 +196,7 @@ POST /api/score/{sale_id}
 | `mv_expected_price` | float | P50 predicted price (expected value) |
 | `mv_low_price` | float | P25 predicted price (low estimate) |
 | `mv_high_price` | float | P75 predicted price (high estimate) |
+| `mv_expected_index` | float | Price multiplier vs session median |
 | `mv_confidence_tier` | string | Confidence level: `"high"`, `"medium"`, `"low"` |
 
 **Output Options:**
@@ -203,6 +206,86 @@ POST /api/score/{sale_id}
 | `none` | Return JSON only (default) |
 | `csv` | Save to `csv/sale_{sale_id}_scored.csv` |
 | `db` | Write predictions to `tblHorseAnalytics` |
+
+---
+
+### Commit Selected Lots
+
+Commit selected lots to the database after scoring. This enables a two-step workflow:
+1. Score sale → view all predictions
+2. Select specific lots → commit only those to DB
+
+```
+POST /api/score/{sale_id}/commit
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sale_id` | integer | The sale ID (must match `sales_id` in each lot) |
+
+**Request Body:**
+
+```json
+{
+  "lots": [
+    {
+      "horse_id": 789012,
+      "sales_id": 2094,
+      "mv_expected_price": 120000,
+      "mv_low_price": 75000,
+      "mv_high_price": 195000,
+      "mv_expected_index": 1.41,
+      "mv_confidence_tier": "medium",
+      "session_median_price": 85000
+    }
+  ]
+}
+```
+
+**Request Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `horse_id` | integer | Horse identifier |
+| `sales_id` | integer | Sale identifier (must match path `sale_id`) |
+| `mv_expected_price` | float | P50 predicted price |
+| `mv_low_price` | float | P25 predicted price |
+| `mv_high_price` | float | P75 predicted price |
+| `mv_expected_index` | float | Price multiplier vs session median |
+| `mv_confidence_tier` | string | `"high"`, `"medium"`, or `"low"` |
+| `session_median_price` | float | Session median price |
+
+**Response:**
+
+```json
+{
+  "sale_id": 2094,
+  "country_code": "AUS",
+  "inserted": 5,
+  "updated": 3,
+  "total": 8
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sale_id` | integer | The sale ID |
+| `country_code` | string | Country code derived from sale |
+| `inserted` | integer | Number of new records created |
+| `updated` | integer | Number of existing records updated |
+| `total` | integer | Total records processed (inserted + updated) |
+
+**Errors:**
+
+| Status | Cause |
+|--------|-------|
+| `400` | Empty lots array |
+| `400` | `sales_id` in lot doesn't match path `sale_id` |
+| `404` | Sale not found |
 
 ---
 
@@ -585,7 +668,39 @@ interface LotScore {
   mv_expected_price: number;
   mv_low_price: number;
   mv_high_price: number;
+  mv_expected_index: number;
   mv_confidence_tier: "high" | "medium" | "low";
+}
+```
+
+### Lot Commit (Request)
+
+```typescript
+interface LotCommit {
+  horse_id: number;
+  sales_id: number;
+  mv_expected_price: number;
+  mv_low_price: number;
+  mv_high_price: number;
+  mv_expected_index: number;
+  mv_confidence_tier: string;
+  session_median_price: number;
+}
+
+interface CommitLotsRequest {
+  lots: LotCommit[];
+}
+```
+
+### Commit Response
+
+```typescript
+interface CommitLotsResponse {
+  sale_id: number;
+  country_code: string;
+  inserted: number;
+  updated: number;
+  total: number;
 }
 ```
 
@@ -669,6 +784,23 @@ const api = axios.create({
 // Score a sale
 const { data } = await api.post('/api/score/2094');
 console.log(data.summary);
+
+// Two-step workflow: score then commit selected lots
+const scoreResult = await api.post('/api/score/2094');
+const selectedLots = scoreResult.data.lots.filter(lot => lot.mv_confidence_tier !== 'low');
+const commitResult = await api.post('/api/score/2094/commit', {
+  lots: selectedLots.map(lot => ({
+    horse_id: lot.horse_id,
+    sales_id: lot.sales_id,
+    mv_expected_price: lot.mv_expected_price,
+    mv_low_price: lot.mv_low_price,
+    mv_high_price: lot.mv_high_price,
+    mv_expected_index: lot.mv_expected_index,
+    mv_confidence_tier: lot.mv_confidence_tier,
+    session_median_price: lot.session_median_price
+  }))
+});
+console.log(`Committed: ${commitResult.data.inserted} new, ${commitResult.data.updated} updated`);
 
 // Get active models
 const { data: models } = await api.get('/api/config/models');
@@ -756,6 +888,25 @@ curl -X POST "http://localhost:8000/api/score/2094?output=csv" \
 # Score and write to database
 curl -X POST "http://localhost:8000/api/score/2094?output=db" \
   -H "X-API-Key: $API_KEY"
+
+# Commit selected lots to database
+curl -X POST "http://localhost:8000/api/score/2094/commit" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "lots": [
+      {
+        "horse_id": 789012,
+        "sales_id": 2094,
+        "mv_expected_price": 120000,
+        "mv_low_price": 75000,
+        "mv_high_price": 195000,
+        "mv_expected_index": 1.41,
+        "mv_confidence_tier": "medium",
+        "session_median_price": 85000
+      }
+    ]
+  }'
 
 # Get summary only (using jq)
 curl -X POST "http://localhost:8000/api/score/2094" \

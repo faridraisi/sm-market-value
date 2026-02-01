@@ -102,6 +102,12 @@ curl -X POST "http://localhost:8000/api/score/2094" \
 curl -X POST "http://localhost:8000/api/score/2094?output=db" \
   -H "X-API-Key: your-api-key"
 
+# Score, then commit selected lots (two-step workflow)
+curl -X POST "http://localhost:8000/api/score/2094/commit" \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"lots": [{"horse_id": 123, "sales_id": 2094, "mv_expected_price": 120000, "mv_low_price": 75000, "mv_high_price": 195000, "mv_expected_index": 1.41, "mv_confidence_tier": "medium", "session_median_price": 85000}]}'
+
 # Health check (no auth required)
 curl http://localhost:8000/health
 ```
@@ -159,6 +165,7 @@ Output saved to `csv/sale_{sale_id}_scored.csv` with columns:
 | `mv_expected_price` | **Expected sale price (P50)** |
 | `mv_low_price` | Low estimate (P25) |
 | `mv_high_price` | High estimate (P75) |
+| `mv_expected_index` | Price multiplier vs session median |
 | `mv_confidence_tier` | high / medium / low |
 
 ---
@@ -545,6 +552,7 @@ Check that `session_median_price` is set in your inference CSV. Future sales req
 
 | Version | Date | Changes |
 |---------|------|---------|
+| V2.6 | Feb 2026 | Added `POST /api/score/{sale_id}/commit` endpoint for selective lot commit. Added `mv_expected_index` to score response. |
 | V2.4 | Jan 2025 | Centralized config (`config.json` + `.env`). Added API endpoints for training, model listing, and runtime config management. |
 | V2.3 | Jan 2025 | Added `src/train_model.py` with auto-versioning, time-based splits, baseline model comparison, comprehensive training report (`training_report.txt`), and evaluation metrics (MAE/RMSE/R²/MAPE). |
 | V2.2 | Jan 2025 | Added FastAPI endpoint (`POST /api/score/{sale_id}`) for HTTP-based scoring. |

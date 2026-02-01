@@ -91,6 +91,31 @@
 							]
 						}
 					}
+				},
+				{
+					"name": "Commit Selected Lots",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"lots\": [\n    {\n      \"horse_id\": 789012,\n      \"sales_id\": 2094,\n      \"mv_expected_price\": 120000,\n      \"mv_low_price\": 75000,\n      \"mv_high_price\": 195000,\n      \"mv_expected_index\": 1.41,\n      \"mv_confidence_tier\": \"medium\",\n      \"session_median_price\": 85000\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/score/2094/commit",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2094", "commit"]
+						}
+					}
 				}
 			]
 		},
