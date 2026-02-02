@@ -45,7 +45,7 @@ except ModuleNotFoundError:
     )
     from config import config
 
-MODEL_VERSION = "v2.1"
+MODEL_VERSION = "v2.2"
 
 
 # ============================================================================
@@ -85,7 +85,7 @@ def load_models(model_dir: str):
 
 
 # ============================================================================
-# ELITE SCALING LOGIC (v2.1)
+# ELITE SCALING LOGIC (v2.1 — defaults updated v2.2)
 # ============================================================================
 
 
@@ -97,9 +97,9 @@ def apply_elite_scaling(raw_prices: np.ndarray, offsets: dict) -> np.ndarray:
     Only applied when raw_p50 >= threshold.
     """
     elite_config = offsets.get("elite_scaling", {})
-    threshold = elite_config.get("threshold", 300000)
-    base_offset = elite_config.get("base_offset", 0.5)
-    scaling_factor = elite_config.get("scaling_factor", 1.2)
+    threshold = elite_config.get("threshold", 500000)
+    base_offset = elite_config.get("base_offset", 0.25)
+    scaling_factor = elite_config.get("scaling_factor", 0.5)
 
     offsets_array = np.zeros_like(raw_prices)
     mask = raw_prices >= threshold
@@ -132,22 +132,41 @@ def apply_adjustments(
 
 
 # ============================================================================
-# CONFIDENCE TIER (v2.1)
+# CONFIDENCE TIER (v2.2 — Log-Index Distance)
+# ============================================================================
+#
+# v2.2 CHANGE: Replaced hardcoded dollar thresholds ($200k/$300k) with log-index
+# distance from session median. Dollar thresholds didn't scale across sales:
+#   - Classic sale (median $70k): $200k = 2.9x median → "extreme"
+#   - Easter sale (median $360k): $200k = 0.6x median → below median
+# Log-index thresholds are sale-normalized and work uniformly.
+#
+# Thresholds derived from percentile analysis of 3,757 scored AUS lots:
+#   P75 of abs(log_index) = 0.69 → 0.7 (close/moderate boundary)
+#   P90 of abs(log_index) = 0.98 → 1.0 (moderate/extreme boundary)
+#
+# CONFIDENCE MATRIX:
+#                     0 flags    1 flag    2+ flags
+#   Close    (< 0.7)  HIGH       MEDIUM    LOW
+#   Moderate (0.7-1)  MEDIUM     MEDIUM    LOW
+#   Extreme  (>= 1.0) MEDIUM     LOW       LOW
 # ============================================================================
 
 
-def calculate_confidence_tier(df: pd.DataFrame, raw_prices: np.ndarray) -> pd.Series:
+def calculate_confidence_tier(df: pd.DataFrame, pred_log_index: np.ndarray) -> pd.Series:
     """
-    Calculate confidence tier based on data flags AND predicted price tier.
+    Calculate confidence tier based on data flags + prediction extremity
+    in log-index space.
 
-    Logic:
-    - Predicted >= $300k: LOW
-    - Predicted $200k-$300k + any flag: LOW
-    - Predicted $200k-$300k + no flags: MEDIUM
-    - Predicted < $200k + 2+ flags: LOW
-    - Predicted < $200k + 1 flag: MEDIUM
-    - Predicted < $200k + no flags: HIGH
+    Args:
+        df: Input dataframe with flag columns.
+        pred_log_index: Raw Q50 predicted log-index (before elite scaling).
+                        This is log(predicted_price / session_median).
+
+    Returns:
+        Series of 'high' / 'medium' / 'low' confidence tiers.
     """
+    # Count data quality flags
     flags = pd.DataFrame(index=df.index)
     flags["sire_flag"] = (
         df.get("sire_sample_flag_36m", pd.Series(0, index=df.index)).fillna(0).astype(int)
@@ -160,18 +179,29 @@ def calculate_confidence_tier(df: pd.DataFrame, raw_prices: np.ndarray) -> pd.Se
     )
     flag_count = flags.sum(axis=1)
 
+    # Sale-normalised distance from session median
+    abs_log = np.abs(pred_log_index)
+
+    # Initialize all as HIGH
     tier = pd.Series("high", index=df.index)
 
-    tier[raw_prices >= 300000] = "low"
+    # Close predictions (abs_log < 0.7) — within ~0.5x to 2.0x of session median
+    # Model is most reliable here. Tier driven purely by data quality flags.
+    close = abs_log < 0.7
+    tier[close & (flag_count == 1)] = "medium"
+    tier[close & (flag_count >= 2)] = "low"
 
-    mid_high_mask = (raw_prices >= 200000) & (raw_prices < 300000)
-    tier[mid_high_mask & (flag_count >= 1)] = "low"
-    tier[mid_high_mask & (flag_count == 0)] = "medium"
+    # Moderate predictions (0.7 <= abs_log < 1.0) — ~0.4x to 2.7x of session median
+    # Prediction stretching away from anchor. Medium baseline; LOW only with 2+ flags.
+    moderate = (abs_log >= 0.7) & (abs_log < 1.0)
+    tier[moderate & (flag_count <= 1)] = "medium"
+    tier[moderate & (flag_count >= 2)] = "low"
 
-    lower_mask = raw_prices < 200000
-    tier[lower_mask & (flag_count >= 2)] = "low"
-    tier[lower_mask & (flag_count == 1)] = "medium"
-    tier[lower_mask & (flag_count == 0)] = "high"
+    # Extreme predictions (abs_log >= 1.0) — beyond 2.7x or below 0.4x of session median
+    # Highest model uncertainty. Medium only with perfect data; LOW with any flags.
+    extreme = abs_log >= 1.0
+    tier[extreme & (flag_count == 0)] = "medium"
+    tier[extreme & (flag_count >= 1)] = "low"
 
     return tier
 
@@ -250,7 +280,8 @@ def score_lots(
             "mv_low_price": np.round(session_median * np.exp(adj_q25), -2),
             "mv_high_price": np.round(session_median * np.exp(adj_q75), -2),
             "mv_raw_price": np.round(raw_prices, -2),
-            "mv_confidence_tier": calculate_confidence_tier(df, raw_prices),
+            # v2.2: Use pred_q50 (log-index) instead of raw_prices (dollars)
+            "mv_confidence_tier": calculate_confidence_tier(df, pred_q50),
             "mv_model_version": MODEL_VERSION,
             "mv_generated_at": datetime.now(timezone.utc),
         }
