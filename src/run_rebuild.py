@@ -376,7 +376,7 @@ def build_features(base_lots, hist_lots, conn=None):
 
     # Sire momentum and sample flag
     sire_metrics["sire_momentum"] = sire_metrics["sire_median_price_12m"] - sire_metrics["sire_median_price_36m"]
-    sire_metrics["sire_sample_flag_36m"] = (sire_metrics["sire_sold_count_36m"] >= 5).astype(int)
+    sire_metrics["sire_sample_flag_36m"] = (sire_metrics["sire_sold_count_36m"] < 10).astype(int)
 
     # Compute dam stats
     print("  Computing dam stats...")
