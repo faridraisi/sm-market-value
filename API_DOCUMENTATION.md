@@ -3,7 +3,7 @@
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
 **Base URL:** `http://localhost:8000` (development) or your production server
-**API Version:** 2.6.0
+**API Version:** 2.7.0
 
 ---
 
@@ -59,6 +59,7 @@ API_KEY=your_api_key
 |--------|----------|------|-------------|
 | `GET` | `/health` | No | Health check |
 | `POST` | `/api/score/{sale_id}` | Yes | Score all lots for a sale |
+| `POST` | `/api/score/{sale_id}/compare` | Yes | Score and compare with existing DB values |
 | `POST` | `/api/score/{sale_id}/commit` | Yes | Commit selected lots to database |
 | `POST` | `/api/train/{country}` | Yes | Train new model (background) |
 | `GET` | `/api/models/{country}` | Yes | List all models for country |
@@ -206,6 +207,126 @@ POST /api/score/{sale_id}
 | `none` | Return JSON only (default) |
 | `csv` | Save to `csv/sale_{sale_id}_scored.csv` |
 | `db` | Write predictions to `tblHorseAnalytics` |
+
+---
+
+### Compare with Existing Values
+
+Score a sale and compare new predictions with existing values in `tblHorseAnalytics`. This is a read-only operation that enables previewing changes before committing.
+
+```
+POST /api/score/{sale_id}/compare
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sale_id` | integer | The sale ID to score and compare |
+
+**Response:**
+```json
+{
+  "sale_id": 2101,
+  "country_code": "AUS",
+  "model_dir": "models/aus_v3",
+  "total_lots": 490,
+  "new_lots": 12,
+  "existing_lots": 478,
+  "changed_lots": 156,
+  "unchanged_lots": 322,
+  "avg_price_delta": 3500.00,
+  "avg_price_delta_pct": 2.80,
+  "lots": [
+    {
+      "lot_id": 548629,
+      "horse_id": 1792852,
+      "sales_id": 2101,
+      "lot_number": 1,
+      "horse_name": "EXAMPLE HORSE",
+      "sire_name": "EXAMPLE SIRE",
+      "session_median_price": 85000,
+      "new": {
+        "lot_id": 548629,
+        "horse_id": 1792852,
+        "sales_id": 2101,
+        "lot_number": 1,
+        "horse_name": "EXAMPLE HORSE",
+        "sire_name": "EXAMPLE SIRE",
+        "session_median_price": 85000,
+        "mv_expected_price": 125000,
+        "mv_low_price": 80000,
+        "mv_high_price": 200000,
+        "mv_expected_index": 1.47,
+        "mv_confidence_tier": "medium"
+      },
+      "existing": {
+        "mv_expected_price": 120000,
+        "mv_low_price": 75000,
+        "mv_high_price": 195000,
+        "mv_expected_index": 1.41,
+        "mv_confidence_tier": "medium",
+        "session_median_price": 85000
+      },
+      "delta": {
+        "mv_expected_price": 5000,
+        "mv_expected_price_pct": 4.17,
+        "mv_low_price": 5000,
+        "mv_high_price": 5000
+      },
+      "is_new": false
+    }
+  ]
+}
+```
+
+**Summary Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_lots` | integer | Total lots scored |
+| `new_lots` | integer | Lots not in database (no existing prediction) |
+| `existing_lots` | integer | Lots with existing predictions |
+| `changed_lots` | integer | Existing lots where new != existing |
+| `unchanged_lots` | integer | Existing lots where new == existing |
+| `avg_price_delta` | float | Average absolute price change (existing lots only) |
+| `avg_price_delta_pct` | float | Average percentage price change (existing lots only) |
+
+**Lot Comparison Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `new` | LotScore | New prediction from current model |
+| `existing` | ExistingValues\|null | Current DB values (null if new lot) |
+| `delta` | DeltaValues\|null | Calculated differences (null if new lot) |
+| `is_new` | boolean | `true` if lot has no existing prediction |
+
+**ExistingValues Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mv_expected_price` | float\|null | Current marketValue in DB |
+| `mv_low_price` | float\|null | Current marketValueLow in DB |
+| `mv_high_price` | float\|null | Current marketValueHigh in DB |
+| `mv_expected_index` | float\|null | Current marketValueMultiplier in DB |
+| `mv_confidence_tier` | string\|null | Current marketValueConfidence in DB |
+| `session_median_price` | float\|null | Current sessionMedianPrice in DB |
+
+**DeltaValues Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mv_expected_price` | float | Absolute change (new - existing) |
+| `mv_expected_price_pct` | float | Percentage change |
+| `mv_low_price` | float\|null | Absolute change for low price |
+| `mv_high_price` | float\|null | Absolute change for high price |
+
+**Use Cases:**
+
+- Preview changes before committing to database
+- Identify which lots are new vs. updated
+- Review price deltas (positive = increase, negative = decrease)
+- Filter lots by change magnitude before selective commit
 
 ---
 
@@ -704,6 +825,66 @@ interface CommitLotsResponse {
 }
 ```
 
+### Existing Values
+
+```typescript
+interface ExistingValues {
+  mv_expected_price: number | null;
+  mv_low_price: number | null;
+  mv_high_price: number | null;
+  mv_expected_index: number | null;
+  mv_confidence_tier: string | null;
+  session_median_price: number | null;
+}
+```
+
+### Delta Values
+
+```typescript
+interface DeltaValues {
+  mv_expected_price: number | null;
+  mv_expected_price_pct: number | null;
+  mv_low_price: number | null;
+  mv_high_price: number | null;
+}
+```
+
+### Lot Score Comparison
+
+```typescript
+interface LotScoreComparison {
+  lot_id: number;
+  horse_id: number | null;
+  sales_id: number;
+  lot_number: number | null;
+  horse_name: string | null;
+  sire_name: string | null;
+  session_median_price: number;
+  new: LotScore;
+  existing: ExistingValues | null;
+  delta: DeltaValues | null;
+  is_new: boolean;
+}
+```
+
+### Compare Response
+
+```typescript
+interface CompareResponse {
+  sale_id: number;
+  country_code: string;
+  model_dir: string;
+  total_lots: number;
+  new_lots: number;
+  existing_lots: number;
+  changed_lots: number;
+  unchanged_lots: number;
+  avg_price_delta: number;
+  avg_price_delta_pct: number;
+  lots: LotScoreComparison[];
+}
+```
+
 ---
 
 ## Error Handling
@@ -888,6 +1069,24 @@ curl -X POST "http://localhost:8000/api/score/2094?output=csv" \
 # Score and write to database
 curl -X POST "http://localhost:8000/api/score/2094?output=db" \
   -H "X-API-Key: $API_KEY"
+
+# Compare with existing DB values
+curl -X POST "http://localhost:8000/api/score/2101/compare" \
+  -H "X-API-Key: $API_KEY"
+
+# Compare - get summary only
+curl -X POST "http://localhost:8000/api/score/2101/compare" \
+  -H "X-API-Key: $API_KEY" | jq '{
+    total: .total_lots,
+    new: .new_lots,
+    existing: .existing_lots,
+    changed: .changed_lots,
+    avg_delta_pct: .avg_price_delta_pct
+  }'
+
+# Compare - get changed lots only
+curl -X POST "http://localhost:8000/api/score/2101/compare" \
+  -H "X-API-Key: $API_KEY" | jq '[.lots[] | select(.delta.mv_expected_price != 0)]'
 
 # Commit selected lots to database
 curl -X POST "http://localhost:8000/api/score/2094/commit" \

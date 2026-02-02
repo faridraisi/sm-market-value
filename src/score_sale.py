@@ -273,6 +273,52 @@ def score_lots(
 # ============================================================================
 
 
+def fetch_existing_predictions(conn, horse_ids: list, sales_id: int) -> dict:
+    """
+    Fetch existing MV predictions from tblHorseAnalytics.
+
+    Args:
+        conn: Database connection
+        horse_ids: List of horse IDs to fetch
+        sales_id: Sale ID to filter by
+
+    Returns:
+        Dictionary mapping horse_id to existing prediction values
+    """
+    cursor = conn.cursor()
+    existing = {}
+
+    def to_float(val):
+        """Convert Decimal/numeric to float, or return None."""
+        return float(val) if val is not None else None
+
+    for horse_id in horse_ids:
+        cursor.execute(
+            """
+            SELECT marketValue, marketValueLow, marketValueHigh,
+                   marketValueMultiplier, marketValueConfidence,
+                   sessionMedianPrice
+            FROM tblHorseAnalytics
+            WHERE horseId = ? AND salesId = ?
+            """,
+            (horse_id, sales_id),
+        )
+
+        row = cursor.fetchone()
+        if row:
+            existing[horse_id] = {
+                "mv_expected_price": to_float(row[0]),
+                "mv_low_price": to_float(row[1]),
+                "mv_high_price": to_float(row[2]),
+                "mv_expected_index": to_float(row[3]),
+                "mv_confidence_tier": row[4],  # string, no conversion needed
+                "session_median_price": to_float(row[5]),
+            }
+
+    cursor.close()
+    return existing
+
+
 def upsert_to_database(results: pd.DataFrame, country_code: str) -> tuple[int, int]:
     """
     Insert/update market value predictions to tblHorseAnalytics.

@@ -93,6 +93,23 @@
 					}
 				},
 				{
+					"name": "Compare with Existing Values",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2101/compare",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2101", "compare"]
+						}
+					}
+				},
+				{
 					"name": "Commit Selected Lots",
 					"request": {
 						"method": "POST",

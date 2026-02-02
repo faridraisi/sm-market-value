@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 from src import rebuild_sale_features, get_connection, fetch_sale_country, MODEL_VERSION
-from src.score_sale import load_models, get_model_dir, score_lots, upsert_to_database
+from src.score_sale import load_models, get_model_dir, score_lots, upsert_to_database, fetch_existing_predictions
 from src.train_model import train_model
 from src.config import config, CONFIG_PATH
 
@@ -135,6 +135,57 @@ class CommitLotsResponse(BaseModel):
     inserted: int
     updated: int
     total: int
+
+
+class ExistingValues(BaseModel):
+    mv_expected_price: Optional[float] = None
+    mv_low_price: Optional[float] = None
+    mv_high_price: Optional[float] = None
+    mv_expected_index: Optional[float] = None
+    mv_confidence_tier: Optional[str] = None
+    session_median_price: Optional[float] = None
+
+
+class DeltaValues(BaseModel):
+    mv_expected_price: Optional[float] = None
+    mv_expected_price_pct: Optional[float] = None
+    mv_low_price: Optional[float] = None
+    mv_high_price: Optional[float] = None
+
+
+class LotScoreComparison(BaseModel):
+    lot_id: int
+    horse_id: Optional[int]
+    sales_id: int
+    lot_number: Optional[int]
+    horse_name: Optional[str]
+    sire_name: Optional[str]
+    session_median_price: float
+
+    # New predictions
+    new: LotScore
+
+    # Existing DB values (None if new record)
+    existing: Optional[ExistingValues] = None
+
+    # Delta values
+    delta: Optional[DeltaValues] = None
+
+    is_new: bool
+
+
+class CompareResponse(BaseModel):
+    sale_id: int
+    country_code: str
+    model_dir: str
+    total_lots: int
+    new_lots: int
+    existing_lots: int
+    changed_lots: int
+    unchanged_lots: int
+    avg_price_delta: float
+    avg_price_delta_pct: float
+    lots: list[LotScoreComparison]
 
 
 class HealthResponse(BaseModel):
@@ -404,6 +455,149 @@ async def commit_lots(
         inserted=inserted,
         updated=updated,
         total=inserted + updated,
+    )
+
+
+@app.post("/api/score/{sale_id}/compare", response_model=CompareResponse)
+async def score_and_compare(
+    sale_id: int,
+    api_key: str = Security(verify_api_key),
+):
+    """
+    Score sale and compare with existing database values.
+
+    Returns new predictions alongside existing values from tblHorseAnalytics,
+    with calculated deltas. Read-only operation - does not modify database.
+    """
+    # Get country and validate sale exists
+    try:
+        conn = get_connection()
+        country_code = fetch_sale_country(conn, sale_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    # Rebuild features
+    features_df = rebuild_sale_features(sale_id, export_csv=False)
+    if features_df.empty:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"No lots found for sale {sale_id}")
+
+    # Load models and score
+    model_dir = get_model_dir(country_code)
+    models, offsets, feature_cols = load_models(model_dir)
+    results_df = score_lots(features_df, models, offsets, feature_cols)
+
+    # Fetch existing predictions from database
+    horse_ids = [int(h) for h in results_df["horseId"].dropna().tolist()]
+    existing_predictions = fetch_existing_predictions(conn, horse_ids, sale_id)
+    conn.close()
+
+    # Build comparison results
+    comparison_lots = []
+    deltas = []  # For computing averages
+
+    for _, row in results_df.iterrows():
+        horse_id = int(row["horseId"]) if pd.notna(row.get("horseId")) else None
+
+        # Build new prediction (LotScore)
+        new_score = LotScore(
+            lot_id=int(row["lot_id"]),
+            horse_id=horse_id,
+            sales_id=int(row["salesId"]),
+            lot_number=int(row["lot_number"]) if pd.notna(row.get("lot_number")) else None,
+            horse_name=row.get("horse_name"),
+            sire_name=row.get("sire_name"),
+            session_median_price=float(row["session_median_price"]),
+            mv_expected_price=float(row["mv_expected_price"]),
+            mv_low_price=float(row["mv_low_price"]),
+            mv_high_price=float(row["mv_high_price"]),
+            mv_expected_index=float(row["mv_expected_index"]),
+            mv_confidence_tier=row["mv_confidence_tier"],
+        )
+
+        # Check for existing prediction
+        existing = existing_predictions.get(horse_id) if horse_id else None
+        is_new = existing is None
+
+        existing_values = None
+        delta_values = None
+
+        if existing:
+            existing_values = ExistingValues(
+                mv_expected_price=existing.get("mv_expected_price"),
+                mv_low_price=existing.get("mv_low_price"),
+                mv_high_price=existing.get("mv_high_price"),
+                mv_expected_index=existing.get("mv_expected_index"),
+                mv_confidence_tier=existing.get("mv_confidence_tier"),
+                session_median_price=existing.get("session_median_price"),
+            )
+
+            # Calculate deltas
+            if existing.get("mv_expected_price") is not None:
+                delta_expected = float(row["mv_expected_price"]) - existing["mv_expected_price"]
+                delta_pct = (delta_expected / existing["mv_expected_price"] * 100) if existing["mv_expected_price"] != 0 else 0.0
+
+                delta_low = None
+                if existing.get("mv_low_price") is not None:
+                    delta_low = float(row["mv_low_price"]) - existing["mv_low_price"]
+
+                delta_high = None
+                if existing.get("mv_high_price") is not None:
+                    delta_high = float(row["mv_high_price"]) - existing["mv_high_price"]
+
+                delta_values = DeltaValues(
+                    mv_expected_price=round(delta_expected, 2),
+                    mv_expected_price_pct=round(delta_pct, 2),
+                    mv_low_price=round(delta_low, 2) if delta_low is not None else None,
+                    mv_high_price=round(delta_high, 2) if delta_high is not None else None,
+                )
+
+                deltas.append({
+                    "absolute": delta_expected,
+                    "pct": delta_pct,
+                })
+
+        comparison_lots.append(LotScoreComparison(
+            lot_id=int(row["lot_id"]),
+            horse_id=horse_id,
+            sales_id=int(row["salesId"]),
+            lot_number=int(row["lot_number"]) if pd.notna(row.get("lot_number")) else None,
+            horse_name=row.get("horse_name"),
+            sire_name=row.get("sire_name"),
+            session_median_price=float(row["session_median_price"]),
+            new=new_score,
+            existing=existing_values,
+            delta=delta_values,
+            is_new=is_new,
+        ))
+
+    # Compute summary stats
+    total_lots = len(comparison_lots)
+    new_lots = sum(1 for lot in comparison_lots if lot.is_new)
+    existing_lots = total_lots - new_lots
+
+    # Changed = any difference in expected price (new != existing)
+    changed_lots = sum(
+        1 for lot in comparison_lots
+        if not lot.is_new and lot.delta and lot.delta.mv_expected_price != 0
+    )
+    unchanged_lots = existing_lots - changed_lots
+
+    avg_price_delta = sum(d["absolute"] for d in deltas) / len(deltas) if deltas else 0.0
+    avg_price_delta_pct = sum(d["pct"] for d in deltas) / len(deltas) if deltas else 0.0
+
+    return CompareResponse(
+        sale_id=sale_id,
+        country_code=country_code,
+        model_dir=model_dir,
+        total_lots=total_lots,
+        new_lots=new_lots,
+        existing_lots=existing_lots,
+        changed_lots=changed_lots,
+        unchanged_lots=unchanged_lots,
+        avg_price_delta=round(avg_price_delta, 2),
+        avg_price_delta_pct=round(avg_price_delta_pct, 2),
+        lots=comparison_lots,
     )
 
 
