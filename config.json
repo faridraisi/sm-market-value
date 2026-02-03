@@ -1,19 +1,174 @@
 {
-  "models": {
-    "aus": "aus",
-    "nzl": "nzl",
-    "usa": "usa"
-  },
   "year_start": 2020,
   "year_end": null,
   "model_test_last_years": 2,
   "audit_user_id": 2,
-  "hist_countries": {
-    "NZL": ["NZL", "AUS"]
-  },
-  "currency_map": {
-    "AUS": 1,
-    "NZL": 6,
-    "USA": 7
+
+  "regions": {
+    "AUS": {
+      "model": "aus",
+      "currency_id": 1,
+      "hist_countries": ["AUS"],
+      "elite_scaling": {
+        "threshold": 500000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "NZL": {
+      "model": "nzl",
+      "currency_id": 6,
+      "hist_countries": ["NZL", "AUS"],
+      "elite_scaling": {
+        "threshold": 100000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "USA": {
+      "model": "usa",
+      "currency_id": 7,
+      "hist_countries": ["USA"],
+      "elite_scaling": {
+        "threshold": 500000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "GBR": {
+      "model": "gbr",
+      "currency_id": 4,
+      "hist_countries": ["GBR", "IRE"],
+      "elite_scaling": {
+        "threshold": 300000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "IRE": {
+      "model": "ire",
+      "currency_id": 3,
+      "hist_countries": ["IRE", "GBR"],
+      "elite_scaling": {
+        "threshold": 300000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "FRA": {
+      "model": "fra",
+      "currency_id": 3,
+      "hist_countries": ["FRA"],
+      "elite_scaling": {
+        "threshold": 200000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "GER": {
+      "model": "ger",
+      "currency_id": 3,
+      "hist_countries": ["GER"],
+      "elite_scaling": {
+        "threshold": 150000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "ZAF": {
+      "model": "zaf",
+      "currency_id": 8,
+      "hist_countries": ["ZAF"],
+      "elite_scaling": {
+        "threshold": 2000000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "JPN": {
+      "model": "jpn",
+      "currency_id": 5,
+      "hist_countries": ["JPN"],
+      "elite_scaling": {
+        "threshold": 100000000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "CAN": {
+      "model": "can",
+      "currency_id": 2,
+      "hist_countries": ["CAN"],
+      "elite_scaling": {
+        "threshold": 300000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "HKG": {
+      "model": "hkg",
+      "currency_id": 9,
+      "hist_countries": ["HKG"],
+      "elite_scaling": {
+        "threshold": 4000000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    }
   }
 }

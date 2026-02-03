@@ -2,7 +2,7 @@
 
 Predict expected yearling sale prices with confidence ranges.
 
-**Supported Countries:** Australia (AUS), New Zealand (NZL)
+**Supported Countries:** AUS, NZL, USA, GBR, IRE, FRA, GER, ZAF, JPN, CAN, HKG
 
 ---
 
@@ -50,39 +50,41 @@ API_KEY=your-secret-api-key
 **`config.json`** — App settings (runtime-editable, committed to git):
 ```json
 {
-  "models": {
-    "aus": "aus",
-    "nzl": "nzl",
-    "usa": "usa"
-  },
   "year_start": 2020,
   "year_end": null,
   "model_test_last_years": 2,
   "audit_user_id": 2,
-  "hist_countries": {
-    "NZL": ["NZL", "AUS"]
-  },
-  "currency_map": {
-    "AUS": 1,
-    "NZL": 6,
-    "USA": 7
+  "regions": {
+    "AUS": {
+      "model": "aus",
+      "currency_id": 1,
+      "hist_countries": ["AUS"],
+      "elite_scaling": {"threshold": 500000, "base_offset": 0.25, "scaling_factor": 0.5},
+      "confidence_tiers": {"close_threshold": 0.7, "extreme_threshold": 1.0},
+      "sire_sample_min_count": 10
+    },
+    "NZL": {...},
+    "USA": {...},
+    "GBR": {...},
+    "IRE": {...},
+    "FRA": {...},
+    "GER": {...},
+    "ZAF": {...},
+    "JPN": {...},
+    "CAN": {...},
+    "HKG": {...}
   }
 }
 ```
 
 **Note:** `year_end: null` uses the current year automatically. Set to a specific year (e.g., `2027`) for future sales.
-```
 
-To use the AUS model for NZL sales (e.g., for cross-country testing), update `config.json`:
-```json
-"models": {
-  "nzl": "aus"
-}
-```
-
-Or via API:
+To use the AUS model for NZL sales (e.g., for cross-country testing), update via API:
 ```bash
-curl -X PUT "http://localhost:8000/api/config/models/nzl?model=aus" -H "X-API-Key: $API_KEY"
+curl -X POST "http://localhost:8000/api/config/NZL" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "aus"}'
 ```
 
 ### 4. Run via API (Optional)
@@ -127,28 +129,31 @@ curl -X POST "http://localhost:8000/api/train/aus?version=v5" -H "X-API-Key: $AP
 ```bash
 # List all models for a country (with metrics)
 curl "http://localhost:8000/api/models/aus" -H "X-API-Key: $API_KEY"
-
-# Get active models (all countries)
-curl "http://localhost:8000/api/config/models" -H "X-API-Key: $API_KEY"
-
-# Set active model for a country
-curl -X PUT "http://localhost:8000/api/config/models/aus?model=aus_v5" -H "X-API-Key: $API_KEY"
 ```
 
 **Configuration:**
 ```bash
+# Get full config
+curl "http://localhost:8000/api/config" -H "X-API-Key: $API_KEY"
+
 # Get/set year range (year_end optional - omit to use current year)
 curl "http://localhost:8000/api/config/years" -H "X-API-Key: $API_KEY"
-curl -X PUT "http://localhost:8000/api/config/years?year_start=2020" -H "X-API-Key: $API_KEY"
 curl -X PUT "http://localhost:8000/api/config/years?year_start=2020&year_end=2027" -H "X-API-Key: $API_KEY"
 
-# Get/set test years (for train/test split)
-curl "http://localhost:8000/api/config/test-years" -H "X-API-Key: $API_KEY"
-curl -X PUT "http://localhost:8000/api/config/test-years?model_test_last_years=2" -H "X-API-Key: $API_KEY"
+# Get region config
+curl "http://localhost:8000/api/config/AUS" -H "X-API-Key: $API_KEY"
 
-# Get/set historical countries
-curl "http://localhost:8000/api/config/hist-countries" -H "X-API-Key: $API_KEY"
-curl -X PUT "http://localhost:8000/api/config/hist-countries/NZL?hist_countries=NZL&hist_countries=AUS" -H "X-API-Key: $API_KEY"
+# Update region config (partial update)
+curl -X POST "http://localhost:8000/api/config/AUS" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "aus_v5"}'
+
+# Update nested config (e.g., elite scaling threshold)
+curl -X POST "http://localhost:8000/api/config/AUS" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"elite_scaling": {"threshold": 600000}}'
 ```
 
 ### 5. View Results
@@ -326,7 +331,7 @@ Scored predictions are persisted here for UI display. Use `--output db` to write
 | `marketValueMultiplier` | `mv_expected_index` |
 | `marketValueConfidence` | `mv_confidence_tier` (high/medium/low) |
 | `sessionMedianPrice` | `session_median_price` |
-| `currencyId` | Auto-set: AUS=1, NZL=6, USA=7 |
+| `currencyId` | Auto-set from region config (AUS=1, CAN=2, EUR=3, GBP=4, JPY=5, NZD=6, USD=7, ZAR=8, HKD=9) |
 | `modifiedBy` | From `AUDIT_USER_ID` in .env |
 
 ---
@@ -478,16 +483,12 @@ The `training_report.txt` includes:
 
 ### Activating New Model
 
-After training, update `config.json`:
-```json
-"models": {
-  "aus": "aus_v3"
-}
-```
-
-Or via API:
+After training, update `config.json` regions section or via API:
 ```bash
-curl -X PUT "http://localhost:8000/api/config/models/aus?model=aus_v3" -H "X-API-Key: $API_KEY"
+curl -X POST "http://localhost:8000/api/config/AUS" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "aus_v3"}'
 ```
 
 ### Manual CSV Export (Alternative)
@@ -552,6 +553,7 @@ Check that `session_median_price` is set in your inference CSV. Future sales req
 
 | Version | Date | Changes |
 |---------|------|---------|
+| V2.7 | Feb 2026 | Simplified Config API: `GET/POST/PUT/DELETE /api/config/{country}` replaces granular endpoints. |
 | V2.6 | Feb 2026 | Added `POST /api/score/{sale_id}/commit` endpoint for selective lot commit. Added `mv_expected_index` to score response. |
 | V2.4 | Jan 2025 | Centralized config (`config.json` + `.env`). Added API endpoints for training, model listing, and runtime config management. |
 | V2.3 | Jan 2025 | Added `src/train_model.py` with auto-versioning, time-based splits, baseline model comparison, comprehensive training report (`training_report.txt`), and evaluation metrics (MAE/RMSE/R²/MAPE). |

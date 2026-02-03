@@ -188,7 +188,7 @@ def compute_session_medians(base_lots: pd.DataFrame) -> pd.DataFrame:
     return medians
 
 
-def build_training_features(base_lots: pd.DataFrame, hist_lots: pd.DataFrame) -> pd.DataFrame:
+def build_training_features(base_lots: pd.DataFrame, hist_lots: pd.DataFrame, country_code: str) -> pd.DataFrame:
     """
     Build all features for training lots.
 
@@ -222,7 +222,8 @@ def build_training_features(base_lots: pd.DataFrame, hist_lots: pd.DataFrame) ->
         sire_12m = compute_sire_metrics(hist_lots, sire_ids, as_of_date, 12)
         sire_metrics = sire_36m.merge(sire_12m, on="sireId", how="outer")
         sire_metrics["sire_momentum"] = sire_metrics["sire_median_price_12m"] - sire_metrics["sire_median_price_36m"]
-        sire_metrics["sire_sample_flag_36m"] = (sire_metrics["sire_sold_count_36m"] < 10).astype(int)
+        min_count = config.app.get_sire_sample_min_count(country_code)
+        sire_metrics["sire_sample_flag_36m"] = (sire_metrics["sire_sold_count_36m"] < min_count).astype(int)
 
         dam_stats = compute_dam_stats(hist_lots, dam_ids, as_of_date)
         vendor_metrics = compute_vendor_metrics(hist_lots, vendor_ids, as_of_date)
@@ -277,7 +278,7 @@ def export_training_data(country: str) -> pd.DataFrame:
     conn.close()
 
     print("  Building features...")
-    df = build_training_features(base_lots, hist_lots)
+    df = build_training_features(base_lots, hist_lots, country)
     print(f"  Built {len(df)} training rows with features")
 
     return df
@@ -619,11 +620,6 @@ def calibrate_models(
     offsets = {
         "offset_p25": float(offset_p25),
         "offset_p75": float(offset_p75),
-        # "elite_scaling": {
-        #     "threshold": 300000,
-        #     "base_offset": 0.5,
-        #     "scaling_factor": 1.2,
-        # },
         "calibrated_coverage_p25": calibrated_coverage_p25,
         "calibrated_coverage_p75": calibrated_coverage_p75,
     }

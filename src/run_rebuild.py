@@ -345,7 +345,7 @@ def compute_vendor_metrics(hist_lots, vendor_ids, as_of_date):
     return result
 
 
-def build_features(base_lots, hist_lots, conn=None):
+def build_features(base_lots, hist_lots, country_code: str, conn=None):
     """Build all features for the base lots."""
     if base_lots.empty:
         return base_lots
@@ -376,7 +376,8 @@ def build_features(base_lots, hist_lots, conn=None):
 
     # Sire momentum and sample flag
     sire_metrics["sire_momentum"] = sire_metrics["sire_median_price_12m"] - sire_metrics["sire_median_price_36m"]
-    sire_metrics["sire_sample_flag_36m"] = (sire_metrics["sire_sold_count_36m"] < 10).astype(int)
+    min_count = config.app.get_sire_sample_min_count(country_code)
+    sire_metrics["sire_sample_flag_36m"] = (sire_metrics["sire_sold_count_36m"] < min_count).astype(int)
 
     # Compute dam stats
     print("  Computing dam stats...")
@@ -444,7 +445,7 @@ def rebuild_sale_features(sale_id: int, export_csv: bool = True) -> pd.DataFrame
         return base_lots
 
     hist_lots = fetch_hist_lots(conn, hist_countries)
-    features = build_features(base_lots, hist_lots, conn)
+    features = build_features(base_lots, hist_lots, country_code, conn)
     conn.close()
 
     if export_csv:
@@ -495,7 +496,7 @@ def main():
 
         # Build features in pandas (pass conn for prior year median fallback)
         print("Building features...")
-        features = build_features(base_lots, hist_lots, conn)
+        features = build_features(base_lots, hist_lots, country_code, conn)
 
         conn.close()
         print("Database connection closed.")

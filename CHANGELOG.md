@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.7.0] - 2026-02-02
+
+### Changed
+- **Simplified Config API** - Replaced granular config endpoints with REST-style region management:
+  - `GET /api/config` - Get full configuration including all regions
+  - `GET /api/config/{country}` - Get region config
+  - `POST /api/config/{country}` - Partial update (supports nested updates like `{"elite_scaling": {"threshold": 600000}}`)
+  - `PUT /api/config/{country}` - Create new region (full config required)
+  - `DELETE /api/config/{country}` - Remove region
+- Kept `GET/PUT /api/config/years` and `GET/PUT /api/config/test-years` as separate endpoints
+
+### Removed
+- `/api/config/models` and `/api/config/models/{country}`
+- `/api/config/hist-countries` and `/api/config/hist-countries/{country}`
+- `/api/config/regions` and `/api/config/regions/{country}`
+- `/api/config/elite-scaling/{country}`
+- `/api/config/confidence-tiers/{country}`
+- `/api/config/sire-sample-min-count/{country}`
+
 ## [2.6.0] - 2026-02-02
 
 ### Added

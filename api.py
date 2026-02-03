@@ -64,6 +64,17 @@ def save_config_json(data: dict):
     config.reload()
 
 
+def deep_merge(base: dict, updates: dict) -> dict:
+    """Deep merge updates into base dict. Returns new dict."""
+    result = base.copy()
+    for key, value in updates.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 # ============================================================================
 # RESPONSE MODELS
 # ============================================================================
@@ -266,15 +277,6 @@ class ModelsListResponse(BaseModel):
     models: list[ModelInfo]
 
 
-class ModelConfigResponse(BaseModel):
-    country: str
-    model: str
-
-
-class AllModelsConfigResponse(BaseModel):
-    models: dict[str, str]
-
-
 class YearsConfigResponse(BaseModel):
     year_start: int
     year_end: int
@@ -284,13 +286,37 @@ class TestYearsConfigResponse(BaseModel):
     model_test_last_years: int
 
 
-class HistCountriesResponse(BaseModel):
-    country: str
+# ============================================================================
+# CONFIG REQUEST/RESPONSE MODELS
+# ============================================================================
+
+
+class EliteScalingConfig(BaseModel):
+    threshold: int = 500000
+    base_offset: float = 0.25
+    scaling_factor: float = 0.5
+
+
+class ConfidenceTiersConfig(BaseModel):
+    close_threshold: float = 0.7
+    extreme_threshold: float = 1.0
+
+
+class RegionConfig(BaseModel):
+    model: str
+    currency_id: int
     hist_countries: list[str]
+    elite_scaling: EliteScalingConfig
+    confidence_tiers: ConfidenceTiersConfig
+    sire_sample_min_count: int = 10
 
 
-class AllHistCountriesResponse(BaseModel):
-    hist_countries: dict[str, list[str]]
+class FullConfigResponse(BaseModel):
+    year_start: int
+    year_end: int | None
+    model_test_last_years: int
+    audit_user_id: int
+    regions: dict[str, RegionConfig]
 
 
 # ============================================================================
@@ -332,7 +358,7 @@ async def score_sale(
     # Load models and score
     model_dir = get_model_dir(country_code)
     models, offsets, feature_cols = load_models(model_dir)
-    results_df = score_lots(features_df, models, offsets, feature_cols)
+    results_df = score_lots(features_df, models, offsets, feature_cols, country_code)
 
     # Handle output
     if output == "csv":
@@ -485,7 +511,7 @@ async def score_and_compare(
     # Load models and score
     model_dir = get_model_dir(country_code)
     models, offsets, feature_cols = load_models(model_dir)
-    results_df = score_lots(features_df, models, offsets, feature_cols)
+    results_df = score_lots(features_df, models, offsets, feature_cols, country_code)
 
     # Fetch existing predictions from database
     horse_ids = [int(h) for h in results_df["horseId"].dropna().tolist()]
@@ -892,51 +918,43 @@ async def list_models(
 
 
 # ============================================================================
-# CONFIG ENDPOINTS - MODELS
+# CONFIG ENDPOINTS
 # ============================================================================
 
 
-@app.get("/api/config/models", response_model=AllModelsConfigResponse)
-async def get_all_model_configs(
+@app.get("/api/config", response_model=FullConfigResponse)
+async def get_full_config(
     api_key: str = Security(verify_api_key),
 ):
-    """Get active models for all countries."""
-    return AllModelsConfigResponse(models=config.app.models)
+    """Get full configuration including all regions."""
+    regions = {}
+    for country, region in config.app.regions.items():
+        regions[country] = RegionConfig(
+            model=region.model,
+            currency_id=region.currency_id,
+            hist_countries=region.hist_countries,
+            elite_scaling=EliteScalingConfig(
+                threshold=region.elite_scaling.threshold,
+                base_offset=region.elite_scaling.base_offset,
+                scaling_factor=region.elite_scaling.scaling_factor,
+            ),
+            confidence_tiers=ConfidenceTiersConfig(
+                close_threshold=region.confidence_tiers.close_threshold,
+                extreme_threshold=region.confidence_tiers.extreme_threshold,
+            ),
+            sire_sample_min_count=region.sire_sample_min_count,
+        )
+
+    return FullConfigResponse(
+        year_start=config.app.year_start,
+        year_end=config.app.year_end,
+        model_test_last_years=config.app.model_test_last_years,
+        audit_user_id=config.app.audit_user_id,
+        regions=regions,
+    )
 
 
-@app.put("/api/config/models/{country}", response_model=ModelConfigResponse)
-async def set_model_config(
-    country: str,
-    model: str = Query(..., description="Model directory name (e.g., 'aus_v5')"),
-    api_key: str = Security(verify_api_key),
-):
-    """
-    Set the active model for a country.
-
-    The model directory must exist in the models/ folder.
-    """
-    country = country.lower()
-    if country not in ["aus", "nzl", "usa"]:
-        raise HTTPException(status_code=400, detail=f"Invalid country: {country}. Must be aus, nzl, or usa.")
-
-    # Verify model directory exists
-    model_path = Path("models") / model
-    if not model_path.exists():
-        raise HTTPException(status_code=404, detail=f"Model directory not found: {model}")
-
-    # Update config
-    data = load_config_json()
-    data["models"][country] = model
-    save_config_json(data)
-
-    return ModelConfigResponse(country=country.upper(), model=model)
-
-
-# ============================================================================
-# CONFIG ENDPOINTS - YEARS
-# ============================================================================
-
-
+# Years endpoints - must be defined before {country} to avoid route conflict
 @app.get("/api/config/years", response_model=YearsConfigResponse)
 async def get_years_config(
     api_key: str = Security(verify_api_key),
@@ -988,73 +1006,129 @@ async def set_test_years_config(
     return TestYearsConfigResponse(model_test_last_years=model_test_last_years)
 
 
-# ============================================================================
-# CONFIG ENDPOINTS - HIST COUNTRIES
-# ============================================================================
-
-
-@app.get("/api/config/hist-countries", response_model=AllHistCountriesResponse)
-async def get_all_hist_countries(
-    api_key: str = Security(verify_api_key),
-):
-    """Get all historical country mappings."""
-    return AllHistCountriesResponse(hist_countries=config.app.hist_countries)
-
-
-@app.get("/api/config/hist-countries/{country}", response_model=HistCountriesResponse)
-async def get_hist_countries_config(
+# Region endpoints - {country} parameter routes must come after specific routes
+@app.get("/api/config/{country}", response_model=RegionConfig)
+async def get_region_config(
     country: str,
     api_key: str = Security(verify_api_key),
 ):
-    """Get historical countries for lookback for a specific country."""
+    """Get configuration for a specific region."""
     country = country.upper()
-    hist = config.app.get_hist_countries(country)
-    return HistCountriesResponse(country=country, hist_countries=hist)
+    try:
+        region = config.app.get_region(country)
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"Region {country} not found")
+
+    return RegionConfig(
+        model=region.model,
+        currency_id=region.currency_id,
+        hist_countries=region.hist_countries,
+        elite_scaling=EliteScalingConfig(
+            threshold=region.elite_scaling.threshold,
+            base_offset=region.elite_scaling.base_offset,
+            scaling_factor=region.elite_scaling.scaling_factor,
+        ),
+        confidence_tiers=ConfidenceTiersConfig(
+            close_threshold=region.confidence_tiers.close_threshold,
+            extreme_threshold=region.confidence_tiers.extreme_threshold,
+        ),
+        sire_sample_min_count=region.sire_sample_min_count,
+    )
 
 
-@app.put("/api/config/hist-countries/{country}", response_model=HistCountriesResponse)
-async def set_hist_countries_config(
+@app.post("/api/config/{country}", response_model=RegionConfig)
+async def update_region_config(
     country: str,
-    hist_countries: list[str] = Query(..., description="List of country codes for historical lookback"),
+    updates: dict,
     api_key: str = Security(verify_api_key),
 ):
     """
-    Set historical countries for lookback.
+    Partial or full update for an existing region.
 
-    Example: For NZL sales, include both NZL and AUS historical data.
+    Supports nested partial updates, e.g.:
+    - {"model": "aus_v5"} - update just the model
+    - {"elite_scaling": {"threshold": 600000}} - update just the threshold
     """
     country = country.upper()
-    hist_countries = [c.upper() for c in hist_countries]
-
-    if not hist_countries:
-        raise HTTPException(status_code=400, detail="hist_countries cannot be empty")
 
     data = load_config_json()
-    data["hist_countries"][country] = hist_countries
+    if country not in data.get("regions", {}):
+        raise HTTPException(status_code=404, detail=f"Region {country} not found")
+
+    # Deep merge updates into existing config
+    existing = data["regions"][country]
+    data["regions"][country] = deep_merge(existing, updates)
     save_config_json(data)
 
-    return HistCountriesResponse(country=country, hist_countries=hist_countries)
+    # Return updated config
+    region = config.app.get_region(country)
+    return RegionConfig(
+        model=region.model,
+        currency_id=region.currency_id,
+        hist_countries=region.hist_countries,
+        elite_scaling=EliteScalingConfig(
+            threshold=region.elite_scaling.threshold,
+            base_offset=region.elite_scaling.base_offset,
+            scaling_factor=region.elite_scaling.scaling_factor,
+        ),
+        confidence_tiers=ConfidenceTiersConfig(
+            close_threshold=region.confidence_tiers.close_threshold,
+            extreme_threshold=region.confidence_tiers.extreme_threshold,
+        ),
+        sire_sample_min_count=region.sire_sample_min_count,
+    )
 
 
-@app.delete("/api/config/hist-countries/{country}")
-async def delete_hist_countries_config(
+@app.put("/api/config/{country}", response_model=RegionConfig)
+async def create_region_config(
     country: str,
+    region_config: RegionConfig,
     api_key: str = Security(verify_api_key),
 ):
     """
-    Remove historical country override.
+    Add a new region (full config required).
 
-    After deletion, the country will use only its own historical data.
+    PUT creates if not exists, requires complete configuration.
     """
     country = country.upper()
 
     data = load_config_json()
-    if country in data["hist_countries"]:
-        del data["hist_countries"][country]
-        save_config_json(data)
-        return {"message": f"Removed hist_countries override for {country}"}
+    data.setdefault("regions", {})[country] = {
+        "model": region_config.model,
+        "currency_id": region_config.currency_id,
+        "hist_countries": region_config.hist_countries,
+        "elite_scaling": {
+            "threshold": region_config.elite_scaling.threshold,
+            "base_offset": region_config.elite_scaling.base_offset,
+            "scaling_factor": region_config.elite_scaling.scaling_factor,
+        },
+        "confidence_tiers": {
+            "close_threshold": region_config.confidence_tiers.close_threshold,
+            "extreme_threshold": region_config.confidence_tiers.extreme_threshold,
+        },
+        "sire_sample_min_count": region_config.sire_sample_min_count,
+    }
+    save_config_json(data)
 
-    return {"message": f"No override existed for {country}"}
+    return region_config
+
+
+@app.delete("/api/config/{country}")
+async def delete_region_config(
+    country: str,
+    api_key: str = Security(verify_api_key),
+):
+    """Remove a region from configuration."""
+    country = country.upper()
+
+    data = load_config_json()
+    if country not in data.get("regions", {}):
+        raise HTTPException(status_code=404, detail=f"Region {country} not found")
+
+    del data["regions"][country]
+    save_config_json(data)
+
+    return {"message": f"Region {country} removed"}
 
 
 # ============================================================================

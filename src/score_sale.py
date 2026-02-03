@@ -85,21 +85,33 @@ def load_models(model_dir: str):
 
 
 # ============================================================================
-# ELITE SCALING LOGIC (v2.1 — defaults updated v2.2)
+# ELITE SCALING LOGIC (v2.2 — uses region config)
 # ============================================================================
 
 
-def apply_elite_scaling(raw_prices: np.ndarray, offsets: dict) -> np.ndarray:
+def apply_elite_scaling(
+    raw_prices: np.ndarray, offsets: dict, country_code: str
+) -> np.ndarray:
     """
     Apply elite scaling for predictions above threshold.
 
     Formula: offset = base_offset + (ln(raw_p50) - ln(threshold)) * scaling_factor
     Only applied when raw_p50 >= threshold.
+
+    Uses elite_scaling from offsets (model-specific) if present,
+    otherwise falls back to region config.
     """
-    elite_config = offsets.get("elite_scaling", {})
-    threshold = elite_config.get("threshold", 500000)
-    base_offset = elite_config.get("base_offset", 0.25)
-    scaling_factor = elite_config.get("scaling_factor", 0.5)
+    # Try model-specific offsets first, fall back to region config
+    if "elite_scaling" in offsets:
+        elite_config = offsets["elite_scaling"]
+        threshold = elite_config.get("threshold", 500000)
+        base_offset = elite_config.get("base_offset", 0.25)
+        scaling_factor = elite_config.get("scaling_factor", 0.5)
+    else:
+        region_config = config.app.get_elite_scaling(country_code)
+        threshold = region_config.threshold
+        base_offset = region_config.base_offset
+        scaling_factor = region_config.scaling_factor
 
     offsets_array = np.zeros_like(raw_prices)
     mask = raw_prices >= threshold
@@ -119,10 +131,11 @@ def apply_adjustments(
     pred_q50: np.ndarray,
     pred_q75: np.ndarray,
     offsets: dict,
+    country_code: str,
 ) -> tuple:
     """Apply all adjustments: elite scaling + base calibration."""
     raw_prices = session_median * np.exp(pred_q50)
-    elite_offsets = apply_elite_scaling(raw_prices, offsets)
+    elite_offsets = apply_elite_scaling(raw_prices, offsets, country_code)
 
     adj_q50 = pred_q50 + elite_offsets
     adj_q25 = pred_q25 + offsets["offset_p25"] + elite_offsets
@@ -153,7 +166,9 @@ def apply_adjustments(
 # ============================================================================
 
 
-def calculate_confidence_tier(df: pd.DataFrame, pred_log_index: np.ndarray) -> pd.Series:
+def calculate_confidence_tier(
+    df: pd.DataFrame, pred_log_index: np.ndarray, country_code: str
+) -> pd.Series:
     """
     Calculate confidence tier based on data flags + prediction extremity
     in log-index space.
@@ -162,10 +177,16 @@ def calculate_confidence_tier(df: pd.DataFrame, pred_log_index: np.ndarray) -> p
         df: Input dataframe with flag columns.
         pred_log_index: Raw Q50 predicted log-index (before elite scaling).
                         This is log(predicted_price / session_median).
+        country_code: Country code for region-specific thresholds.
 
     Returns:
         Series of 'high' / 'medium' / 'low' confidence tiers.
     """
+    # Get thresholds from region config
+    tier_config = config.app.get_confidence_tiers(country_code)
+    close_threshold = tier_config.close_threshold
+    extreme_threshold = tier_config.extreme_threshold
+
     # Count data quality flags
     flags = pd.DataFrame(index=df.index)
     flags["sire_flag"] = (
@@ -185,21 +206,21 @@ def calculate_confidence_tier(df: pd.DataFrame, pred_log_index: np.ndarray) -> p
     # Initialize all as HIGH
     tier = pd.Series("high", index=df.index)
 
-    # Close predictions (abs_log < 0.7) — within ~0.5x to 2.0x of session median
+    # Close predictions — within ~0.5x to 2.0x of session median
     # Model is most reliable here. Tier driven purely by data quality flags.
-    close = abs_log < 0.7
+    close = abs_log < close_threshold
     tier[close & (flag_count == 1)] = "medium"
     tier[close & (flag_count >= 2)] = "low"
 
-    # Moderate predictions (0.7 <= abs_log < 1.0) — ~0.4x to 2.7x of session median
-    # Prediction stretching away from anchor. Medium baseline; LOW only with 2+ flags.
-    moderate = (abs_log >= 0.7) & (abs_log < 1.0)
+    # Moderate predictions — stretching away from anchor
+    # Medium baseline; LOW only with 2+ flags.
+    moderate = (abs_log >= close_threshold) & (abs_log < extreme_threshold)
     tier[moderate & (flag_count <= 1)] = "medium"
     tier[moderate & (flag_count >= 2)] = "low"
 
-    # Extreme predictions (abs_log >= 1.0) — beyond 2.7x or below 0.4x of session median
+    # Extreme predictions — beyond extreme_threshold
     # Highest model uncertainty. Medium only with perfect data; LOW with any flags.
-    extreme = abs_log >= 1.0
+    extreme = abs_log >= extreme_threshold
     tier[extreme & (flag_count == 0)] = "medium"
     tier[extreme & (flag_count >= 1)] = "low"
 
@@ -212,7 +233,7 @@ def calculate_confidence_tier(df: pd.DataFrame, pred_log_index: np.ndarray) -> p
 
 
 def score_lots(
-    df: pd.DataFrame, models: dict, offsets: dict, feature_cols: list
+    df: pd.DataFrame, models: dict, offsets: dict, feature_cols: list, country_code: str
 ) -> pd.DataFrame:
     """Score lots and return predictions."""
 
@@ -256,9 +277,9 @@ def score_lots(
 
     session_median = df["session_median_price"].values
 
-    # Apply adjustments
+    # Apply adjustments (uses region config for elite scaling)
     adj_q25, adj_q50, adj_q75, raw_prices = apply_adjustments(
-        session_median, pred_q25, pred_q50, pred_q75, offsets
+        session_median, pred_q25, pred_q50, pred_q75, offsets, country_code
     )
 
     # Build results DataFrame
@@ -280,8 +301,8 @@ def score_lots(
             "mv_low_price": np.round(session_median * np.exp(adj_q25), -2),
             "mv_high_price": np.round(session_median * np.exp(adj_q75), -2),
             "mv_raw_price": np.round(raw_prices, -2),
-            # v2.2: Use pred_q50 (log-index) instead of raw_prices (dollars)
-            "mv_confidence_tier": calculate_confidence_tier(df, pred_q50),
+            # v2.2: Use pred_q50 (log-index) with region-specific thresholds
+            "mv_confidence_tier": calculate_confidence_tier(df, pred_q50, country_code),
             "mv_model_version": MODEL_VERSION,
             "mv_generated_at": datetime.now(timezone.utc),
         }
@@ -360,7 +381,7 @@ def upsert_to_database(results: pd.DataFrame, country_code: str) -> tuple[int, i
     conn = get_connection()
     cursor = conn.cursor()
 
-    currency_id = config.app.currency_map.get(country_code, 1)
+    currency_id = config.app.get_currency_id(country_code)
     modified_by = config.app.audit_user_id
 
     inserted = 0
@@ -490,16 +511,21 @@ def score_sale(sale_id: int, output: str = "csv") -> pd.DataFrame:
     models, offsets, feature_cols = load_models(model_dir)
     print(f"  Model version: {MODEL_VERSION}")
 
-    # Show elite scaling config
+    # Show elite scaling config (from model or region config)
     if "elite_scaling" in offsets:
         cfg = offsets["elite_scaling"]
-        print(f"\nElite scaling (predictions >= ${cfg['threshold']:,}):")
+        print(f"\nElite scaling from model (predictions >= ${cfg['threshold']:,}):")
         print(f"  Base offset: {cfg['base_offset']}")
         print(f"  Scaling factor: {cfg['scaling_factor']}")
+    else:
+        cfg = config.app.get_elite_scaling(country_code)
+        print(f"\nElite scaling from region config (predictions >= ${cfg.threshold:,}):")
+        print(f"  Base offset: {cfg.base_offset}")
+        print(f"  Scaling factor: {cfg.scaling_factor}")
 
     # Step 5: Score lots
     print("\nScoring lots...")
-    results = score_lots(features, models, offsets, feature_cols)
+    results = score_lots(features, models, offsets, feature_cols, country_code)
 
     # Step 6: Output
     if output == "csv":

@@ -63,16 +63,15 @@ API_KEY=your_api_key
 | `POST` | `/api/score/{sale_id}/commit` | Yes | Commit selected lots to database |
 | `POST` | `/api/train/{country}` | Yes | Train new model (background) |
 | `GET` | `/api/models/{country}` | Yes | List all models for country |
-| `GET` | `/api/config/models` | Yes | Get active models |
-| `PUT` | `/api/config/models/{country}` | Yes | Set active model |
+| `GET` | `/api/config` | Yes | Get full configuration |
 | `GET` | `/api/config/years` | Yes | Get year range |
 | `PUT` | `/api/config/years` | Yes | Set year range |
 | `GET` | `/api/config/test-years` | Yes | Get test years config |
 | `PUT` | `/api/config/test-years` | Yes | Set test years config |
-| `GET` | `/api/config/hist-countries` | Yes | Get all historical mappings |
-| `GET` | `/api/config/hist-countries/{country}` | Yes | Get historical countries |
-| `PUT` | `/api/config/hist-countries/{country}` | Yes | Set historical countries |
-| `DELETE` | `/api/config/hist-countries/{country}` | Yes | Remove historical override |
+| `GET` | `/api/config/{country}` | Yes | Get region config |
+| `POST` | `/api/config/{country}` | Yes | Partial update region config |
+| `PUT` | `/api/config/{country}` | Yes | Create/replace region config |
+| `DELETE` | `/api/config/{country}` | Yes | Remove region |
 
 ---
 
@@ -527,52 +526,48 @@ GET /api/models/{country}
 
 ## Configuration Endpoints
 
-### Get Active Models
+### Get Full Configuration
 
-Get active model for all countries.
+Get full configuration including all regions.
 
 ```
-GET /api/config/models
+GET /api/config
 ```
 
 **Response:**
 ```json
 {
-  "models": {
-    "aus": "aus_v3",
-    "nzl": "nzl",
-    "usa": "usa"
+  "year_start": 2020,
+  "year_end": null,
+  "model_test_last_years": 2,
+  "audit_user_id": 2,
+  "regions": {
+    "AUS": {
+      "model": "aus",
+      "currency_id": 1,
+      "hist_countries": ["AUS"],
+      "elite_scaling": {
+        "threshold": 500000,
+        "base_offset": 0.25,
+        "scaling_factor": 0.5
+      },
+      "confidence_tiers": {
+        "close_threshold": 0.7,
+        "extreme_threshold": 1.0
+      },
+      "sire_sample_min_count": 10
+    },
+    "NZL": {...},
+    "USA": {...},
+    "GBR": {...},
+    "IRE": {...},
+    "FRA": {...},
+    "GER": {...},
+    "ZAF": {...},
+    "JPN": {...},
+    "CAN": {...},
+    "HKG": {...}
   }
-}
-```
-
----
-
-### Set Active Model
-
-Set the active model for a country.
-
-```
-PUT /api/config/models/{country}?model={model_name}
-```
-
-**Path Parameters:**
-
-| Parameter | Type | Values | Description |
-|-----------|------|--------|-------------|
-| `country` | string | `aus`, `nzl`, `usa` | Country code |
-
-**Query Parameters:**
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `model` | string | Model directory name (e.g., `aus_v5`) |
-
-**Response:**
-```json
-{
-  "country": "AUS",
-  "model": "aus_v5"
 }
 ```
 
@@ -661,79 +656,135 @@ PUT /api/config/test-years?model_test_last_years={years}
 
 ---
 
-### Get Historical Countries
+### Get Region Config
 
-Get historical country mappings (for cross-country data lookback).
+Get configuration for a specific region.
 
 ```
-GET /api/config/hist-countries
+GET /api/config/{country}
 ```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `country` | string | Country code (e.g., `AUS`, `NZL`, `USA`) |
 
 **Response:**
 ```json
 {
-  "hist_countries": {
-    "NZL": ["NZL", "AUS"]
+  "model": "aus",
+  "currency_id": 1,
+  "hist_countries": ["AUS"],
+  "elite_scaling": {
+    "threshold": 500000,
+    "base_offset": 0.25,
+    "scaling_factor": 0.5
+  },
+  "confidence_tiers": {
+    "close_threshold": 0.7,
+    "extreme_threshold": 1.0
+  },
+  "sire_sample_min_count": 10
+}
+```
+
+---
+
+### Update Region Config (Partial)
+
+Partial or full update for an existing region. Supports nested partial updates.
+
+```
+POST /api/config/{country}
+Content-Type: application/json
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `country` | string | Country code (e.g., `AUS`, `NZL`, `USA`) |
+
+**Request Body Examples:**
+
+```json
+// Update just the model
+{"model": "aus_v5"}
+
+// Update just elite scaling threshold
+{"elite_scaling": {"threshold": 600000}}
+
+// Update multiple fields
+{
+  "model": "aus_v5",
+  "confidence_tiers": {
+    "close_threshold": 0.6,
+    "extreme_threshold": 0.9
   }
 }
 ```
 
----
-
-### Get Historical Countries (Single)
-
-Get historical countries for a specific country.
-
-```
-GET /api/config/hist-countries/{country}
-```
-
-**Response:**
-```json
-{
-  "country": "NZL",
-  "hist_countries": ["NZL", "AUS"]
-}
-```
+**Response:** Returns the updated region config.
 
 ---
 
-### Set Historical Countries
+### Create Region Config
 
-Set historical countries for lookback.
+Add a new region (full config required). PUT creates if not exists.
 
 ```
-PUT /api/config/hist-countries/{country}?hist_countries=NZL&hist_countries=AUS
+PUT /api/config/{country}
+Content-Type: application/json
 ```
 
-**Query Parameters:**
+**Path Parameters:**
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `hist_countries` | array | List of country codes (repeatable) |
+| `country` | string | Country code (e.g., `GBR`) |
 
-**Response:**
+**Request Body:**
 ```json
 {
-  "country": "NZL",
-  "hist_countries": ["NZL", "AUS"]
+  "model": "gbr",
+  "currency_id": 2,
+  "hist_countries": ["GBR"],
+  "elite_scaling": {
+    "threshold": 400000,
+    "base_offset": 0.25,
+    "scaling_factor": 0.5
+  },
+  "confidence_tiers": {
+    "close_threshold": 0.7,
+    "extreme_threshold": 1.0
+  },
+  "sire_sample_min_count": 10
 }
 ```
 
+**Response:** Returns the created region config.
+
 ---
 
-### Delete Historical Countries
+### Delete Region Config
 
-Remove historical country override.
+Remove a region from configuration.
 
 ```
-DELETE /api/config/hist-countries/{country}
+DELETE /api/config/{country}
 ```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `country` | string | Country code to remove |
 
 **Response:**
 ```json
 {
-  "message": "Removed hist_countries override for NZL"
+  "message": "Region GBR removed"
 }
 ```
 
@@ -885,6 +936,50 @@ interface CompareResponse {
 }
 ```
 
+### Elite Scaling Config
+
+```typescript
+interface EliteScalingConfig {
+  threshold: number;
+  base_offset: number;
+  scaling_factor: number;
+}
+```
+
+### Confidence Tiers Config
+
+```typescript
+interface ConfidenceTiersConfig {
+  close_threshold: number;
+  extreme_threshold: number;
+}
+```
+
+### Region Config
+
+```typescript
+interface RegionConfig {
+  model: string;
+  currency_id: number;
+  hist_countries: string[];
+  elite_scaling: EliteScalingConfig;
+  confidence_tiers: ConfidenceTiersConfig;
+  sire_sample_min_count: number;
+}
+```
+
+### Full Config Response
+
+```typescript
+interface FullConfigResponse {
+  year_start: number;
+  year_end: number | null;
+  model_test_last_years: number;
+  audit_user_id: number;
+  regions: Record<string, RegionConfig>;
+}
+```
+
 ---
 
 ## Error Handling
@@ -983,14 +1078,12 @@ const commitResult = await api.post('/api/score/2094/commit', {
 });
 console.log(`Committed: ${commitResult.data.inserted} new, ${commitResult.data.updated} updated`);
 
-// Get active models
-const { data: models } = await api.get('/api/config/models');
-console.log(models);
+// Get full config
+const { data: config } = await api.get('/api/config');
+console.log(config);
 
-// Set active model
-await api.put('/api/config/models/aus', null, {
-  params: { model: 'aus_v5' }
-});
+// Update region config (partial)
+await api.post('/api/config/AUS', { model: 'aus_v5' });
 ```
 
 ### React Hook Example
@@ -1115,16 +1208,12 @@ curl -X POST "http://localhost:8000/api/score/2094" \
 curl "http://localhost:8000/api/models/aus" \
   -H "X-API-Key: $API_KEY"
 
-# Get active models
-curl "http://localhost:8000/api/config/models" \
-  -H "X-API-Key: $API_KEY"
-
-# Set active model
-curl -X PUT "http://localhost:8000/api/config/models/aus?model=aus_v5" \
-  -H "X-API-Key: $API_KEY"
-
 # Train new model
 curl -X POST "http://localhost:8000/api/train/aus" \
+  -H "X-API-Key: $API_KEY"
+
+# Get full config
+curl "http://localhost:8000/api/config" \
   -H "X-API-Key: $API_KEY"
 
 # Get year config
@@ -1133,6 +1222,39 @@ curl "http://localhost:8000/api/config/years" \
 
 # Set year range
 curl -X PUT "http://localhost:8000/api/config/years?year_start=2020&year_end=2026" \
+  -H "X-API-Key: $API_KEY"
+
+# Get region config for AUS
+curl "http://localhost:8000/api/config/AUS" \
+  -H "X-API-Key: $API_KEY"
+
+# Partial update - just change model
+curl -X POST "http://localhost:8000/api/config/AUS" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "aus_v5"}'
+
+# Partial update - nested field
+curl -X POST "http://localhost:8000/api/config/AUS" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"elite_scaling": {"threshold": 600000}}'
+
+# Add new region (full config required)
+curl -X PUT "http://localhost:8000/api/config/GBR" \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gbr",
+    "currency_id": 2,
+    "hist_countries": ["GBR"],
+    "elite_scaling": {"threshold": 400000, "base_offset": 0.25, "scaling_factor": 0.5},
+    "confidence_tiers": {"close_threshold": 0.7, "extreme_threshold": 1.0},
+    "sire_sample_min_count": 10
+  }'
+
+# Remove region
+curl -X DELETE "http://localhost:8000/api/config/GBR" \
   -H "X-API-Key: $API_KEY"
 ```
 
@@ -1150,11 +1272,19 @@ The API provides auto-generated documentation at:
 
 ## Country Codes
 
-| Code | Country |
-|------|---------|
-| `AUS` | Australia |
-| `NZL` | New Zealand |
-| `USA` | United States |
+| Code | Country | Currency |
+|------|---------|----------|
+| `AUS` | Australia | AUD |
+| `NZL` | New Zealand | NZD |
+| `USA` | United States | USD |
+| `GBR` | Great Britain | GBP |
+| `IRE` | Ireland | EUR |
+| `FRA` | France | EUR |
+| `GER` | Germany | EUR |
+| `ZAF` | South Africa | ZAR |
+| `JPN` | Japan | JPY |
+| `CAN` | Canada | CAD |
+| `HKG` | Hong Kong | HKD |
 
 ---
 
@@ -1172,7 +1302,24 @@ Price predictions are assigned confidence tiers based on data quality:
 
 ## Elite Scaling
 
-Lots with expected prices >= $300,000 receive special "elite scaling" adjustments to account for the non-linear nature of high-value yearling sales.
+Lots with expected prices above the region's elite threshold receive special "elite scaling" adjustments to account for the non-linear nature of high-value yearling sales.
+
+**Thresholds by Region:**
+| Region | Currency | Threshold |
+|--------|----------|-----------|
+| AUS | AUD | 500,000 |
+| NZL | NZD | 100,000 |
+| USA | USD | 500,000 |
+| GBR | GBP | 300,000 |
+| IRE | EUR | 300,000 |
+| FRA | EUR | 200,000 |
+| GER | EUR | 150,000 |
+| ZAF | ZAR | 2,000,000 |
+| JPN | JPY | 100,000,000 |
+| CAN | CAD | 300,000 |
+| HKG | HKD | 4,000,000 |
+
+Elite scaling parameters are configurable per region via `POST /api/config/{country}`.
 
 The summary includes:
 - `elite_scaling_count` - Number of lots above threshold

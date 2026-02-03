@@ -221,10 +221,10 @@
 			]
 		},
 		{
-			"name": "Config - Models",
+			"name": "Config",
 			"item": [
 				{
-					"name": "Get All Active Models",
+					"name": "Get Full Config",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -234,40 +234,12 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/config/models",
+							"raw": "{{base_url}}/api/config",
 							"host": ["{{base_url}}"],
-							"path": ["api", "config", "models"]
+							"path": ["api", "config"]
 						}
 					}
 				},
-				{
-					"name": "Set Active Model (AUS)",
-					"request": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/config/models/aus?model=aus_v5",
-							"host": ["{{base_url}}"],
-							"path": ["api", "config", "models", "aus"],
-							"query": [
-								{
-									"key": "model",
-									"value": "aus_v5"
-								}
-							]
-						}
-					}
-				}
-			]
-		},
-		{
-			"name": "Config - Years",
-			"item": [
 				{
 					"name": "Get Year Range",
 					"request": {
@@ -286,30 +258,7 @@
 					}
 				},
 				{
-					"name": "Set Year Start (year_end=current)",
-					"request": {
-						"method": "PUT",
-						"header": [
-							{
-								"key": "X-API-Key",
-								"value": "{{api_key}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/config/years?year_start=2020",
-							"host": ["{{base_url}}"],
-							"path": ["api", "config", "years"],
-							"query": [
-								{
-									"key": "year_start",
-									"value": "2020"
-								}
-							]
-						}
-					}
-				},
-				{
-					"name": "Set Year Range (fixed year_end)",
+					"name": "Set Year Range",
 					"request": {
 						"method": "PUT",
 						"header": [
@@ -334,12 +283,7 @@
 							]
 						}
 					}
-				}
-			]
-		},
-		{
-			"name": "Config - Test Years",
-			"item": [
+				},
 				{
 					"name": "Get Test Years",
 					"request": {
@@ -379,14 +323,9 @@
 							]
 						}
 					}
-				}
-			]
-		},
-		{
-			"name": "Config - Hist Countries",
-			"item": [
+				},
 				{
-					"name": "Get All Hist Countries",
+					"name": "Get Region Config (AUS)",
 					"request": {
 						"method": "GET",
 						"header": [
@@ -396,58 +335,89 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/config/hist-countries",
+							"raw": "{{base_url}}/api/config/AUS",
 							"host": ["{{base_url}}"],
-							"path": ["api", "config", "hist-countries"]
+							"path": ["api", "config", "AUS"]
 						}
 					}
 				},
 				{
-					"name": "Get Hist Countries (NZL)",
+					"name": "Update Region Config (partial)",
 					"request": {
-						"method": "GET",
+						"method": "POST",
 						"header": [
 							{
 								"key": "X-API-Key",
 								"value": "{{api_key}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
 							}
 						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"aus_v5\"\n}"
+						},
 						"url": {
-							"raw": "{{base_url}}/api/config/hist-countries/NZL",
+							"raw": "{{base_url}}/api/config/AUS",
 							"host": ["{{base_url}}"],
-							"path": ["api", "config", "hist-countries", "NZL"]
+							"path": ["api", "config", "AUS"]
 						}
 					}
 				},
 				{
-					"name": "Set Hist Countries (NZL)",
+					"name": "Update Elite Scaling (nested partial)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"elite_scaling\": {\n    \"threshold\": 600000\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/config/AUS",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "AUS"]
+						}
+					}
+				},
+				{
+					"name": "Create New Region",
 					"request": {
 						"method": "PUT",
 						"header": [
 							{
 								"key": "X-API-Key",
 								"value": "{{api_key}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
 							}
 						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"gbr\",\n  \"currency_id\": 2,\n  \"hist_countries\": [\"GBR\"],\n  \"elite_scaling\": {\n    \"threshold\": 400000,\n    \"base_offset\": 0.25,\n    \"scaling_factor\": 0.5\n  },\n  \"confidence_tiers\": {\n    \"close_threshold\": 0.7,\n    \"extreme_threshold\": 1.0\n  },\n  \"sire_sample_min_count\": 10\n}"
+						},
 						"url": {
-							"raw": "{{base_url}}/api/config/hist-countries/NZL?hist_countries=NZL&hist_countries=AUS",
+							"raw": "{{base_url}}/api/config/GBR",
 							"host": ["{{base_url}}"],
-							"path": ["api", "config", "hist-countries", "NZL"],
-							"query": [
-								{
-									"key": "hist_countries",
-									"value": "NZL"
-								},
-								{
-									"key": "hist_countries",
-									"value": "AUS"
-								}
-							]
+							"path": ["api", "config", "GBR"]
 						}
 					}
 				},
 				{
-					"name": "Delete Hist Countries (NZL)",
+					"name": "Delete Region",
 					"request": {
 						"method": "DELETE",
 						"header": [
@@ -457,9 +427,9 @@
 							}
 						],
 						"url": {
-							"raw": "{{base_url}}/api/config/hist-countries/NZL",
+							"raw": "{{base_url}}/api/config/GBR",
 							"host": ["{{base_url}}"],
-							"path": ["api", "config", "hist-countries", "NZL"]
+							"path": ["api", "config", "GBR"]
 						}
 					}
 				}
