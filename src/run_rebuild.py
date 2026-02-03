@@ -345,8 +345,16 @@ def compute_vendor_metrics(hist_lots, vendor_ids, as_of_date):
     return result
 
 
-def build_features(base_lots, hist_lots, country_code: str, conn=None):
-    """Build all features for the base lots."""
+def build_features(base_lots, hist_lots, country_code: str, conn=None, session_median_override: float = None):
+    """Build all features for the base lots.
+
+    Args:
+        base_lots: DataFrame of lots to score
+        hist_lots: DataFrame of historical lots for feature computation
+        country_code: Country code for the sale
+        conn: Database connection (optional, for prior year fallback)
+        session_median_override: Manual session median price override (optional)
+    """
     if base_lots.empty:
         return base_lots
 
@@ -354,13 +362,18 @@ def build_features(base_lots, hist_lots, country_code: str, conn=None):
     sale_name = base_lots["sale_name"].iloc[0]
     sale_year = base_lots["sale_year"].iloc[0]
 
-    # Compute sale median with prior year fallback
-    session_median_price = compute_sale_median(base_lots)
-    if session_median_price is None and conn is not None:
-        print("  No sold lots - fetching prior year median...")
-        session_median_price = fetch_prior_year_median(conn, sale_name, sale_year)
-        if session_median_price:
-            print(f"  Using prior year median: {session_median_price}")
+    # Use override if provided, otherwise compute/fetch
+    if session_median_override is not None:
+        session_median_price = session_median_override
+        print(f"  Using manual session median override: {session_median_price}")
+    else:
+        # Compute sale median with prior year fallback
+        session_median_price = compute_sale_median(base_lots)
+        if session_median_price is None and conn is not None:
+            print("  No sold lots - fetching prior year median...")
+            session_median_price = fetch_prior_year_median(conn, sale_name, sale_year)
+            if session_median_price:
+                print(f"  Using prior year median: {session_median_price}")
     base_lots["session_median_price"] = session_median_price
 
     # Get unique IDs
@@ -433,8 +446,18 @@ def export_inference(df, output_path):
     return output_df
 
 
-def rebuild_sale_features(sale_id: int, export_csv: bool = True) -> pd.DataFrame:
-    """Rebuild features for a sale. Returns DataFrame."""
+def rebuild_sale_features(
+    sale_id: int,
+    export_csv: bool = True,
+    session_median_override: float = None
+) -> pd.DataFrame:
+    """Rebuild features for a sale. Returns DataFrame.
+
+    Args:
+        sale_id: Sale ID to rebuild features for
+        export_csv: Whether to export inference CSV
+        session_median_override: Manual session median price override (optional)
+    """
     conn = get_connection()
     country_code = fetch_sale_country(conn, sale_id)
     hist_countries = get_hist_countries(country_code)
@@ -445,7 +468,7 @@ def rebuild_sale_features(sale_id: int, export_csv: bool = True) -> pd.DataFrame
         return base_lots
 
     hist_lots = fetch_hist_lots(conn, hist_countries)
-    features = build_features(base_lots, hist_lots, country_code, conn)
+    features = build_features(base_lots, hist_lots, country_code, conn, session_median_override)
     conn.close()
 
     if export_csv:

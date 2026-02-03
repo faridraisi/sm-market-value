@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.7.1] - 2026-02-03
+
+### Added
+- **Session median override** - Optional `session_median` query parameter for scoring endpoints:
+  - `POST /api/score/{sale_id}?session_median=20000` - Override automatic prior year lookup
+  - `POST /api/score/{sale_id}/compare?session_median=20000` - Compare using custom median
+  - Useful for future sales where prior year median may not be representative
+
 ## [2.7.0] - 2026-02-02
 
 ### Changed

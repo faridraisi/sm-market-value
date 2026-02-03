@@ -93,6 +93,29 @@
 					}
 				},
 				{
+					"name": "Score Sale (with session median override)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2100?session_median=20000",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2100"],
+							"query": [
+								{
+									"key": "session_median",
+									"value": "20000"
+								}
+							]
+						}
+					}
+				},
+				{
 					"name": "Compare with Existing Values",
 					"request": {
 						"method": "POST",
@@ -105,7 +128,14 @@
 						"url": {
 							"raw": "{{base_url}}/api/score/2101/compare",
 							"host": ["{{base_url}}"],
-							"path": ["api", "score", "2101", "compare"]
+							"path": ["api", "score", "2101", "compare"],
+							"query": [
+								{
+									"key": "session_median",
+									"value": "20000",
+									"disabled": true
+								}
+							]
 						}
 					}
 				},

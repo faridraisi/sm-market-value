@@ -340,9 +340,14 @@ async def health_check():
 async def score_sale(
     sale_id: int,
     output: Literal["none", "csv", "db"] = Query(default="none"),
+    session_median: Optional[float] = Query(default=None, description="Manual session median price override"),
     api_key: str = Security(verify_api_key),
 ):
-    """Score all lots for a sale."""
+    """Score all lots for a sale.
+
+    For future sales without sold lots, the session median defaults to the prior year's
+    median for the same sale. Use `session_median` to override this with a custom value.
+    """
     try:
         conn = get_connection()
         country_code = fetch_sale_country(conn, sale_id)
@@ -351,7 +356,11 @@ async def score_sale(
         raise HTTPException(status_code=404, detail=str(e))
 
     # Rebuild features
-    features_df = rebuild_sale_features(sale_id, export_csv=(output == "csv"))
+    features_df = rebuild_sale_features(
+        sale_id,
+        export_csv=(output == "csv"),
+        session_median_override=session_median
+    )
     if features_df.empty:
         raise HTTPException(status_code=404, detail=f"No lots found for sale {sale_id}")
 
@@ -487,6 +496,7 @@ async def commit_lots(
 @app.post("/api/score/{sale_id}/compare", response_model=CompareResponse)
 async def score_and_compare(
     sale_id: int,
+    session_median: Optional[float] = Query(default=None, description="Manual session median price override"),
     api_key: str = Security(verify_api_key),
 ):
     """
@@ -494,6 +504,9 @@ async def score_and_compare(
 
     Returns new predictions alongside existing values from tblHorseAnalytics,
     with calculated deltas. Read-only operation - does not modify database.
+
+    For future sales without sold lots, the session median defaults to the prior year's
+    median for the same sale. Use `session_median` to override this with a custom value.
     """
     # Get country and validate sale exists
     try:
@@ -503,7 +516,11 @@ async def score_and_compare(
         raise HTTPException(status_code=404, detail=str(e))
 
     # Rebuild features
-    features_df = rebuild_sale_features(sale_id, export_csv=False)
+    features_df = rebuild_sale_features(
+        sale_id,
+        export_csv=False,
+        session_median_override=session_median
+    )
     if features_df.empty:
         conn.close()
         raise HTTPException(status_code=404, detail=f"No lots found for sale {sale_id}")
