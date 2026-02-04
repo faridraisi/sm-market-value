@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.9.0] - 2026-02-04
+
+### Added
+- **Email OTP authentication** - Alternative to API key for user-based access:
+  - `POST /auth/request-otp` - Request OTP for whitelisted email
+  - `POST /auth/verify-otp` - Verify OTP and receive JWT token
+  - JWT tokens valid for 24 hours (configurable via `JWT_EXPIRY_HOURS`)
+  - OTPs expire after 10 minutes and are single-use
+- **Dual authentication support** - API accepts both `X-API-Key` header and `Authorization: Bearer <jwt>` header
+- **Dev mode** - Set `AUTH_DEV_MODE=true` to log OTPs to console instead of sending emails
+- New environment variables: `EMAIL_SERVICE_URL`, `EMAIL_SERVICE_API_KEY`, `AUTH_EMAIL_WHITELIST`, `JWT_SECRET`, `JWT_EXPIRY_HOURS`, `AUTH_DEV_MODE`
+
+### Dependencies
+- Added `PyJWT` for JWT token handling
+- Added `httpx` for async HTTP requests to email service
+
 ## [2.8.0] - 2026-02-04
 
 ### Added

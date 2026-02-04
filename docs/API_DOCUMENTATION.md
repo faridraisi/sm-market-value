@@ -3,7 +3,7 @@
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
 **Base URL:** `http://localhost:8000` (development) or your production server
-**API Version:** 2.7.0
+**API Version:** 2.9.0
 
 ---
 
@@ -11,23 +11,38 @@ API documentation for the Market Value scoring system. This document covers all 
 
 1. [Authentication](#authentication)
 2. [Endpoints Overview](#endpoints-overview)
-3. [Scoring Endpoints](#scoring-endpoints)
-4. [Model Management](#model-management)
-5. [Configuration Endpoints](#configuration-endpoints)
-6. [Response Types](#response-types)
-7. [Error Handling](#error-handling)
-8. [Integration Examples](#integration-examples)
+3. [Auth Endpoints](#auth-endpoints)
+4. [Scoring Endpoints](#scoring-endpoints)
+5. [Model Management](#model-management)
+6. [Configuration Endpoints](#configuration-endpoints)
+7. [Response Types](#response-types)
+8. [Error Handling](#error-handling)
+9. [Integration Examples](#integration-examples)
 
 ---
 
 ## Authentication
 
-All endpoints (except `/health`) require API key authentication via the `X-API-Key` header.
+The API supports two authentication methods:
 
-### Request Header
+### 1. API Key Authentication
+
+Use the `X-API-Key` header for server-to-server integration:
 
 ```
 X-API-Key: <your-api-key>
+```
+
+### 2. JWT Token Authentication (OTP)
+
+For user-based authentication, use the email OTP flow:
+
+1. Request OTP: `POST /auth/request-otp` with your whitelisted email
+2. Verify OTP: `POST /auth/verify-otp` with email and code
+3. Use the returned JWT token in the `Authorization` header:
+
+```
+Authorization: Bearer <jwt-token>
 ```
 
 ### Environment Setup
@@ -43,13 +58,24 @@ DB_PASSWORD=your_password
 
 # API authentication (required)
 API_KEY=your_api_key
+
+# Email-based OTP authentication (optional)
+EMAIL_SERVICE_URL=https://your-email-service.com/send
+EMAIL_SERVICE_API_KEY=your_email_service_api_key
+AUTH_EMAIL_WHITELIST=admin@company.com,analyst@company.com
+JWT_SECRET=your_random_32_char_secret_key_here
+JWT_EXPIRY_HOURS=24
+
+# Dev mode (skip email, log OTP to console)
+AUTH_DEV_MODE=false
 ```
 
 ### Authentication Errors
 
 | Status | Description |
 |--------|-------------|
-| `403` | Invalid or missing API key |
+| `403` | Invalid or missing API key / JWT token |
+| `401` | OTP expired, not found, or invalid |
 
 ---
 
@@ -58,6 +84,8 @@ API_KEY=your_api_key
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `GET` | `/health` | No | Health check |
+| `POST` | `/auth/request-otp` | No | Request OTP for email login |
+| `POST` | `/auth/verify-otp` | No | Verify OTP and get JWT token |
 | `POST` | `/api/score/{sale_id}` | Yes | Score all lots for a sale |
 | `POST` | `/api/score/{sale_id}/compare` | Yes | Score and compare with existing DB values |
 | `POST` | `/api/score/{sale_id}/commit` | Yes | Commit selected lots to database |
@@ -75,6 +103,87 @@ API_KEY=your_api_key
 | `POST` | `/api/config/{country}` | Yes | Partial update region config |
 | `PUT` | `/api/config/{country}` | Yes | Create/replace region config |
 | `DELETE` | `/api/config/{country}` | Yes | Remove region |
+
+---
+
+## Auth Endpoints
+
+### Request OTP
+
+Request a one-time password for email-based authentication. Only whitelisted emails can request OTPs.
+
+```
+POST /auth/request-otp
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "email": "user@company.com"
+}
+```
+
+**Response:**
+```json
+{
+  "message": "OTP sent to user@company.com"
+}
+```
+
+**Errors:**
+
+| Status | Description |
+|--------|-------------|
+| `403` | Email not in whitelist |
+| `500` | Email service not configured or failed |
+
+---
+
+### Verify OTP
+
+Verify the OTP code and receive a JWT token for API access.
+
+```
+POST /auth/verify-otp
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "email": "user@company.com",
+  "code": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 86400
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `access_token` | string | JWT token for API authentication |
+| `token_type` | string | Always `"bearer"` |
+| `expires_in` | integer | Token validity in seconds (default: 86400 = 24 hours) |
+
+**Errors:**
+
+| Status | Description |
+|--------|-------------|
+| `401` | OTP expired, not found, or invalid code |
+
+**OTP Notes:**
+- OTPs are valid for 10 minutes
+- Each OTP can only be used once
+- OTPs are 6 digits (e.g., `"123456"`)
 
 ---
 
@@ -1264,6 +1373,29 @@ export API_KEY="your-api-key"
 
 # Health check (no auth required)
 curl http://localhost:8000/health
+
+# ==========================================
+# OTP Authentication Flow
+# ==========================================
+
+# 1. Request OTP (dev mode - check console for code)
+curl -X POST "http://localhost:8000/auth/request-otp" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com"}'
+
+# 2. Verify OTP and get JWT token
+curl -X POST "http://localhost:8000/auth/verify-otp" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "code": "123456"}'
+
+# 3. Use JWT token for API requests
+export JWT_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+curl "http://localhost:8000/api/config" \
+  -H "Authorization: Bearer $JWT_TOKEN"
+
+# ==========================================
+# API Key Authentication
+# ==========================================
 
 # Score a sale
 curl -X POST "http://localhost:8000/api/score/2094" \

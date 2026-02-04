@@ -7,20 +7,24 @@ Usage: uvicorn api:app --host 0.0.0.0 --port 8000
 import io
 import json
 import os
+import random
 import re
 import shutil
-import tempfile
+import time
 import zipfile
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
+import httpx
+import jwt
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Security, Query, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, Security, Query, BackgroundTasks, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from dotenv import load_dotenv
 
 from src import rebuild_sale_features, get_connection, fetch_sale_country, MODEL_VERSION
@@ -42,12 +46,104 @@ app.add_middleware(
 )
 
 # Auth
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=True)
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-async def verify_api_key(api_key: str = Security(api_key_header)):
-    if api_key != os.getenv("API_KEY"):
-        raise HTTPException(status_code=403, detail="Invalid API key")
+# OTP storage (in-memory)
+@dataclass
+class OTPRecord:
+    code: str
+    expires_at: float
+
+
+otp_store: dict[str, OTPRecord] = {}  # email -> OTPRecord
+OTP_EXPIRY_SECONDS = 600  # 10 minutes
+
+
+def get_email_whitelist() -> list[str]:
+    """Get list of whitelisted emails from environment."""
+    whitelist = os.getenv("AUTH_EMAIL_WHITELIST", "")
+    return [e.strip().lower() for e in whitelist.split(",") if e.strip()]
+
+
+def send_otp_email(email: str, code: str) -> bool:
+    """Send OTP code via email service."""
+    if os.getenv("AUTH_DEV_MODE", "").lower() == "true":
+        print(f"[DEV] OTP for {email}: {code}")
+        return True
+
+    url = os.getenv("EMAIL_SERVICE_URL")
+    api_key = os.getenv("EMAIL_SERVICE_API_KEY")
+
+    if not url or not api_key:
+        print("[ERROR] EMAIL_SERVICE_URL or EMAIL_SERVICE_API_KEY not configured")
+        return False
+
+    try:
+        response = httpx.post(
+            url,
+            headers={
+                "x-api-key": api_key,
+                "Content-Type": "application/json"
+            },
+            json={
+                "to": email,
+                "subject": "Your Market Value API Login Code",
+                "body_text": f"Your verification code is: {code}\n\nThis code expires in 10 minutes."
+            },
+            timeout=10.0
+        )
+        if response.status_code == 200:
+            return True
+        print(f"[ERROR] Email service returned {response.status_code}: {response.text}")
+        return False
+    except Exception as e:
+        print(f"[ERROR] Failed to send OTP email: {e}")
+        return False
+
+
+def create_jwt_token(email: str) -> str:
+    """Create a JWT token for the authenticated user."""
+    expiry_hours = int(os.getenv("JWT_EXPIRY_HOURS", 24))
+    payload = {
+        "sub": email,
+        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=expiry_hours)
+    }
+    return jwt.encode(payload, os.getenv("JWT_SECRET", ""), algorithm="HS256")
+
+
+def verify_jwt_token(token: str) -> str | None:
+    """Verify JWT token and return the email (subject) if valid."""
+    secret = os.getenv("JWT_SECRET", "")
+    if not secret:
+        return None
+    try:
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        return payload.get("sub")
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
+        return None
+
+
+async def verify_auth(
+    api_key: str = Security(api_key_header),
+    authorization: str = Header(None)
+):
+    """Verify authentication via API key or JWT token."""
+    # Check API key first
+    if api_key and api_key == os.getenv("API_KEY"):
+        return
+
+    # Check JWT token
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization[7:]
+        email = verify_jwt_token(token)
+        if email:
+            return
+
+    raise HTTPException(status_code=403, detail="Invalid authentication")
 
 
 # ============================================================================
@@ -303,6 +399,30 @@ class TestYearsConfigResponse(BaseModel):
 
 
 # ============================================================================
+# AUTH REQUEST/RESPONSE MODELS
+# ============================================================================
+
+
+class OTPRequest(BaseModel):
+    email: EmailStr
+
+
+class OTPRequestResponse(BaseModel):
+    message: str
+
+
+class OTPVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+
+class OTPVerifyResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int  # seconds
+
+
+# ============================================================================
 # CONFIG REQUEST/RESPONSE MODELS
 # ============================================================================
 
@@ -336,6 +456,58 @@ class FullConfigResponse(BaseModel):
 
 
 # ============================================================================
+# AUTH ENDPOINTS
+# ============================================================================
+
+
+@app.post("/auth/request-otp", response_model=OTPRequestResponse)
+async def request_otp(request: OTPRequest):
+    """Request OTP for whitelisted email."""
+    email = request.email.lower()
+    whitelist = get_email_whitelist()
+
+    if not whitelist:
+        raise HTTPException(status_code=500, detail="Email whitelist not configured")
+
+    if email not in whitelist:
+        raise HTTPException(status_code=403, detail="Email not authorized")
+
+    # Generate 6-digit OTP
+    code = f"{random.randint(0, 999999):06d}"
+    otp_store[email] = OTPRecord(code=code, expires_at=time.time() + OTP_EXPIRY_SECONDS)
+
+    if not send_otp_email(email, code):
+        raise HTTPException(status_code=500, detail="Failed to send email")
+
+    return OTPRequestResponse(message=f"OTP sent to {email}")
+
+
+@app.post("/auth/verify-otp", response_model=OTPVerifyResponse)
+async def verify_otp(request: OTPVerifyRequest):
+    """Verify OTP and return JWT token."""
+    email = request.email.lower()
+    record = otp_store.get(email)
+
+    if not record or time.time() > record.expires_at:
+        raise HTTPException(status_code=401, detail="OTP expired or not found")
+
+    if record.code != request.code:
+        raise HTTPException(status_code=401, detail="Invalid OTP")
+
+    # Remove OTP after successful verification (one-time use)
+    del otp_store[email]
+
+    # Create JWT token
+    token = create_jwt_token(email)
+    expiry_hours = int(os.getenv("JWT_EXPIRY_HOURS", 24))
+
+    return OTPVerifyResponse(
+        access_token=token,
+        expires_in=expiry_hours * 3600
+    )
+
+
+# ============================================================================
 # SCORING ENDPOINTS
 # ============================================================================
 
@@ -357,7 +529,7 @@ async def score_sale(
     sale_id: int,
     output: Literal["none", "csv", "db"] = Query(default="none"),
     session_median: Optional[float] = Query(default=None, description="Manual session median price override"),
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """Score all lots for a sale.
 
@@ -455,7 +627,7 @@ async def score_sale(
 async def commit_lots(
     sale_id: int,
     request: CommitLotsRequest,
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """
     Commit selected lots to database.
@@ -513,7 +685,7 @@ async def commit_lots(
 async def score_and_compare(
     sale_id: int,
     session_median: Optional[float] = Query(default=None, description="Manual session median price override"),
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """
     Score sale and compare with existing database values.
@@ -675,7 +847,7 @@ async def train_model_endpoint(
     country: str,
     background_tasks: BackgroundTasks,
     version: Optional[str] = Query(default=None, description="Force specific version (e.g., v5)"),
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """
     Train a new model for a specific country.
@@ -861,7 +1033,7 @@ def parse_feature_importance(importance_path: Path) -> dict:
 @app.get("/api/models/{country}", response_model=ModelsListResponse)
 async def list_models(
     country: str,
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """
     List all model versions for a country with training metrics.
@@ -963,7 +1135,7 @@ MODEL_REQUIRED_FILES = [
 @app.get("/api/models/{model_name}/download")
 async def download_model(
     model_name: str,
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """
     Download a model as a ZIP file.
@@ -998,7 +1170,7 @@ async def download_model(
 async def upload_model(
     model_name: str,
     file: UploadFile = File(...),
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """
     Upload a new model from a ZIP file.
@@ -1061,7 +1233,7 @@ async def upload_model(
 @app.delete("/api/models/{model_name}", response_model=ModelDeleteResponse)
 async def delete_model(
     model_name: str,
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """
     Delete a model.
@@ -1104,7 +1276,7 @@ async def delete_model(
 
 @app.get("/api/config", response_model=FullConfigResponse)
 async def get_full_config(
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """Get full configuration including all regions."""
     regions = {}
@@ -1137,7 +1309,7 @@ async def get_full_config(
 # Years endpoints - must be defined before {country} to avoid route conflict
 @app.get("/api/config/years", response_model=YearsConfigResponse)
 async def get_years_config(
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """Get the year range for training/scoring. year_end uses current year if not set."""
     return YearsConfigResponse(
@@ -1150,7 +1322,7 @@ async def get_years_config(
 async def set_years_config(
     year_start: int = Query(..., ge=2000, le=2100, description="Start year"),
     year_end: Optional[int] = Query(default=None, ge=2000, le=2100, description="End year (null = current year)"),
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """Set the year range for training/scoring. Set year_end to null to use current year."""
     effective_year_end = year_end if year_end is not None else config.app.get_year_end()
@@ -1167,7 +1339,7 @@ async def set_years_config(
 
 @app.get("/api/config/test-years", response_model=TestYearsConfigResponse)
 async def get_test_years_config(
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """Get model_test_last_years - number of years to hold out for testing."""
     return TestYearsConfigResponse(model_test_last_years=config.app.model_test_last_years)
@@ -1176,7 +1348,7 @@ async def get_test_years_config(
 @app.put("/api/config/test-years", response_model=TestYearsConfigResponse)
 async def set_test_years_config(
     model_test_last_years: int = Query(..., ge=1, le=10, description="Number of years to hold out for testing"),
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """Set model_test_last_years - number of years to hold out for testing."""
     data = load_config_json()
@@ -1190,7 +1362,7 @@ async def set_test_years_config(
 @app.get("/api/config/{country}", response_model=RegionConfig)
 async def get_region_config(
     country: str,
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """Get configuration for a specific region."""
     country = country.upper()
@@ -1220,7 +1392,7 @@ async def get_region_config(
 async def update_region_config(
     country: str,
     updates: dict,
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """
     Partial or full update for an existing region.
@@ -1263,7 +1435,7 @@ async def update_region_config(
 async def create_region_config(
     country: str,
     region_config: RegionConfig,
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """
     Add a new region (full config required).
@@ -1296,7 +1468,7 @@ async def create_region_config(
 @app.delete("/api/config/{country}")
 async def delete_region_config(
     country: str,
-    api_key: str = Security(verify_api_key),
+    _auth: None = Security(verify_auth),
 ):
     """Remove a region from configuration."""
     country = country.upper()
