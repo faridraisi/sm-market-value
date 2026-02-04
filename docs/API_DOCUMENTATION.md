@@ -63,6 +63,9 @@ API_KEY=your_api_key
 | `POST` | `/api/score/{sale_id}/commit` | Yes | Commit selected lots to database |
 | `POST` | `/api/train/{country}` | Yes | Train new model (background) |
 | `GET` | `/api/models/{country}` | Yes | List all models for country |
+| `GET` | `/api/models/{model_name}/download` | Yes | Download model as ZIP |
+| `POST` | `/api/models/{model_name}` | Yes | Upload new model from ZIP |
+| `DELETE` | `/api/models/{model_name}` | Yes | Delete a model |
 | `GET` | `/api/config` | Yes | Get full configuration |
 | `GET` | `/api/config/years` | Yes | Get year range |
 | `PUT` | `/api/config/years` | Yes | Set year range |
@@ -528,6 +531,110 @@ GET /api/models/{country}
   ]
 }
 ```
+
+---
+
+### Download Model
+
+Download a model as a ZIP file containing all model files.
+
+```
+GET /api/models/{model_name}/download
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model_name` | string | Model directory name (e.g., `aus_v8`) |
+
+**Response:**
+- Content-Type: `application/zip`
+- Content-Disposition: `attachment; filename={model_name}.zip`
+
+**ZIP Contents:**
+- `calibration_offsets.json`
+- `feature_cols.json`
+- `mv_v1_q25.txt`, `mv_v1_q50.txt`, `mv_v1_q75.txt`
+- `feature_importance_*.json` (if present)
+- `training_report.txt` (if present)
+
+---
+
+### Upload Model
+
+Upload a new model from a ZIP file.
+
+```
+POST /api/models/{model_name}
+Content-Type: multipart/form-data
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model_name` | string | New model name (lowercase alphanumeric + underscores) |
+
+**Form Data:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | file | ZIP file containing model files |
+
+**Required Files in ZIP:**
+- `calibration_offsets.json`
+- `feature_cols.json`
+- `mv_v1_q25.txt`, `mv_v1_q50.txt`, `mv_v1_q75.txt`
+
+**Response:**
+```json
+{
+  "model_name": "aus_v9",
+  "files": [
+    "calibration_offsets.json",
+    "feature_cols.json",
+    "mv_v1_q25.txt",
+    "mv_v1_q50.txt",
+    "mv_v1_q75.txt",
+    "training_report.txt"
+  ],
+  "size_bytes": 3082226,
+  "message": "Model 'aus_v9' uploaded successfully"
+}
+```
+
+**Errors:**
+- `400`: Invalid model name, invalid ZIP, or missing required files
+- `409`: Model already exists
+
+---
+
+### Delete Model
+
+Delete a model from the server.
+
+```
+DELETE /api/models/{model_name}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model_name` | string | Model directory name |
+
+**Response:**
+```json
+{
+  "model_name": "aus_v9",
+  "message": "Model 'aus_v9' deleted successfully"
+}
+```
+
+**Errors:**
+- `404`: Model not found
+- `409`: Cannot delete - model is active for one or more regions
 
 ---
 

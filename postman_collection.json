@@ -247,6 +247,67 @@
 							"path": ["api", "models", "nzl"]
 						}
 					}
+				},
+				{
+					"name": "Download Model",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/models/aus_v8/download",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "aus_v8", "download"]
+						}
+					}
+				},
+				{
+					"name": "Upload Model",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": ""
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/models/aus_v9",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "aus_v9"]
+						}
+					}
+				},
+				{
+					"name": "Delete Model",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/models/aus_v9",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "aus_v9"]
+						}
+					}
 				}
 			]
 		},

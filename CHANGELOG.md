@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.0] - 2026-02-04
+
+### Added
+- **Model upload/download/delete endpoints** for CI/CD and backup workflows:
+  - `GET /api/models/{model_name}/download` - Download model as ZIP
+  - `POST /api/models/{model_name}` - Upload new model from ZIP
+  - `DELETE /api/models/{model_name}` - Delete model (protected if active)
+- Upload validates required files (calibration_offsets.json, feature_cols.json, mv_v1_q*.txt)
+- Delete blocked if model is active for any region in config
+
 ## [2.7.1] - 2026-02-03
 
 ### Added

@@ -4,18 +4,22 @@ Market Value API - Score yearling lots and manage configuration.
 Usage: uvicorn api:app --host 0.0.0.0 --port 8000
 """
 
+import io
 import json
 import os
 import re
+import shutil
+import tempfile
+import zipfile
 from pathlib import Path
 from typing import Literal, Optional
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Security, Query, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Security, Query, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -275,6 +279,18 @@ class ModelsListResponse(BaseModel):
     country: str
     active_model: str
     models: list[ModelInfo]
+
+
+class ModelUploadResponse(BaseModel):
+    model_name: str
+    files: list[str]
+    size_bytes: int
+    message: str
+
+
+class ModelDeleteResponse(BaseModel):
+    model_name: str
+    message: str
 
 
 class YearsConfigResponse(BaseModel):
@@ -931,6 +947,153 @@ async def list_models(
         country=country.upper(),
         active_model=active_model,
         models=model_infos,
+    )
+
+
+# Required files for a valid model
+MODEL_REQUIRED_FILES = [
+    "calibration_offsets.json",
+    "feature_cols.json",
+    "mv_v1_q25.txt",
+    "mv_v1_q50.txt",
+    "mv_v1_q75.txt",
+]
+
+
+@app.get("/api/models/{model_name}/download")
+async def download_model(
+    model_name: str,
+    api_key: str = Security(verify_api_key),
+):
+    """
+    Download a model as a ZIP file.
+
+    Returns all files in the model directory as a ZIP archive.
+    """
+    # Validate model name format
+    if not re.match(r"^[a-z0-9_]+$", model_name):
+        raise HTTPException(status_code=400, detail="Invalid model name. Use lowercase alphanumeric and underscores only.")
+
+    model_dir = Path("models") / model_name
+    if not model_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
+
+    # Create ZIP in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file_path in model_dir.iterdir():
+            if file_path.is_file():
+                zf.write(file_path, file_path.name)
+
+    zip_buffer.seek(0)
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={model_name}.zip"}
+    )
+
+
+@app.post("/api/models/{model_name}", response_model=ModelUploadResponse)
+async def upload_model(
+    model_name: str,
+    file: UploadFile = File(...),
+    api_key: str = Security(verify_api_key),
+):
+    """
+    Upload a new model from a ZIP file.
+
+    The ZIP must contain required model files:
+    - calibration_offsets.json
+    - feature_cols.json
+    - mv_v1_q25.txt, mv_v1_q50.txt, mv_v1_q75.txt
+
+    Optional files (feature_importance_*.json, training_report.txt) are also accepted.
+    """
+    # Validate model name format
+    if not re.match(r"^[a-z0-9_]+$", model_name):
+        raise HTTPException(status_code=400, detail="Invalid model name. Use lowercase alphanumeric and underscores only.")
+
+    # Check if model already exists
+    model_dir = Path("models") / model_name
+    if model_dir.exists():
+        raise HTTPException(status_code=409, detail=f"Model '{model_name}' already exists. Delete it first to replace.")
+
+    # Validate file is a ZIP
+    if not file.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="File must be a ZIP archive")
+
+    # Read and validate ZIP contents
+    try:
+        content = await file.read()
+        zip_buffer = io.BytesIO(content)
+
+        with zipfile.ZipFile(zip_buffer, "r") as zf:
+            file_names = zf.namelist()
+
+            # Check for required files
+            missing = [f for f in MODEL_REQUIRED_FILES if f not in file_names]
+            if missing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Missing required files: {', '.join(missing)}"
+                )
+
+            # Extract to model directory
+            model_dir.mkdir(parents=True, exist_ok=True)
+            zf.extractall(model_dir)
+
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="Invalid ZIP file")
+
+    # Calculate total size
+    total_size = sum(f.stat().st_size for f in model_dir.iterdir() if f.is_file())
+    extracted_files = [f.name for f in model_dir.iterdir() if f.is_file()]
+
+    return ModelUploadResponse(
+        model_name=model_name,
+        files=extracted_files,
+        size_bytes=total_size,
+        message=f"Model '{model_name}' uploaded successfully"
+    )
+
+
+@app.delete("/api/models/{model_name}", response_model=ModelDeleteResponse)
+async def delete_model(
+    model_name: str,
+    api_key: str = Security(verify_api_key),
+):
+    """
+    Delete a model.
+
+    Cannot delete models that are currently active (referenced in config).
+    """
+    # Validate model name format
+    if not re.match(r"^[a-z0-9_]+$", model_name):
+        raise HTTPException(status_code=400, detail="Invalid model name. Use lowercase alphanumeric and underscores only.")
+
+    model_dir = Path("models") / model_name
+    if not model_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found")
+
+    # Check if model is active for any region
+    active_regions = []
+    for country, region in config.app.regions.items():
+        if region.model == model_name:
+            active_regions.append(country)
+
+    if active_regions:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete model '{model_name}' - it is active for: {', '.join(active_regions)}"
+        )
+
+    # Delete the model directory
+    shutil.rmtree(model_dir)
+
+    return ModelDeleteResponse(
+        model_name=model_name,
+        message=f"Model '{model_name}' deleted successfully"
     )
 
 
