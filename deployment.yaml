@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smmarketvalue
+  labels:
+    app: smmarketvalue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: smmarketvalue
+  template:
+    metadata:
+      labels:
+        app: smmarketvalue
+    spec:
+      containers:
+      - name: smmarketvalue
+        image: 398646198502.dkr.ecr.ap-southeast-2.amazonaws.com/smmarketvalue:latest
+        ports:
+        - containerPort: 8000
+        env:
+        # Database connection
+        - name: DB_SERVER
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: DB_SERVER
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: DB_PASSWORD
+        # Audit
+        - name: AUDIT_USER_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: AUDIT_USER_ID
+        # Country configuration - NZL
+        - name: COUNTRY_NZL_LOOKBACK
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: COUNTRY_NZL_LOOKBACK
+        - name: COUNTRY_NZL_MODEL
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: COUNTRY_NZL_MODEL
+        # Country configuration - AUS
+        - name: COUNTRY_AUS_LOOKBACK
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: COUNTRY_AUS_LOOKBACK
+        - name: COUNTRY_AUS_MODEL
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: COUNTRY_AUS_MODEL
+        # Country configuration - USA
+        - name: COUNTRY_USA_LOOKBACK
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: COUNTRY_USA_LOOKBACK
+        - name: COUNTRY_USA_MODEL
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: COUNTRY_USA_MODEL
+        # API
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: API_KEY

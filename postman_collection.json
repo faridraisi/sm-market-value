@@ -6,9 +6,20 @@
   },
   "variable": [
     {
-      "key": "base_url",
+      "key": "local_url",
       "value": "http://localhost:8000",
       "type": "string"
+    },
+    {
+      "key": "remote_url",
+      "value": "https://smmarketvalue.stallionmatch.horse",
+      "type": "string"
+    },
+    {
+      "key": "base_url",
+      "value": "{{remote_url}}",
+      "type": "string",
+      "description": "Switch between {{local_url}} and {{remote_url}}"
     },
     {
       "key": "api_key",

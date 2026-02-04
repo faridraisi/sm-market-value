@@ -163,8 +163,11 @@ sm-market-value/
 │   ├── aus/                        # Australia models
 │   ├── nzl/                        # New Zealand models
 │   └── usa/                        # USA models (pending)
-├── archive/                        # Legacy/unused files (gitignored)
-├── reports/                        # Generated outputs (gitignored)
+├── Dockerfile                      # EKS container build
+├── deployment.yaml                 # Kubernetes deployment config
+├── service.yaml                    # Kubernetes service (LoadBalancer)
+├── create-k8s-secret.sh            # Create K8s secrets (gitignored)
+├── postman_collection.json         # API test collection
 ├── DEPLOYMENT.md                   # Setup & usage guide
 ├── CHANGELOG.md                    # Version history
 └── README.md                       # This file (model documentation)

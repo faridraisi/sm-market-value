@@ -1,0 +1,51 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment files (secrets)
+.env
+.env.*
+.env.example
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+
+# macOS
+.DS_Store
+
+# K8s deployment configs (not needed in image)
+deployment.yaml
+service.yaml
+create-k8s-secret.sh
+
+# Archive and temporary files
+archive/
+*.tmp
+*.bak
+*.log
+
+# CSV output files
+csv/
+reports/
+
+# Documentation (not needed in container)
+*.md
+postman_collection.json

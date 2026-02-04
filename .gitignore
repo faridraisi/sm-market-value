@@ -34,3 +34,6 @@ archive/
 # Temporary files
 *.tmp
 *.bak
+
+# K8s secret script (contains logic for handling secrets)
+create-k8s-secret.sh
