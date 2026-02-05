@@ -47,42 +47,40 @@ spec:
             secretKeyRef:
               name: aws-secret-smmarketvalue
               key: AUDIT_USER_ID
-        # Country configuration - NZL
-        - name: COUNTRY_NZL_LOOKBACK
-          valueFrom:
-            secretKeyRef:
-              name: aws-secret-smmarketvalue
-              key: COUNTRY_NZL_LOOKBACK
-        - name: COUNTRY_NZL_MODEL
-          valueFrom:
-            secretKeyRef:
-              name: aws-secret-smmarketvalue
-              key: COUNTRY_NZL_MODEL
-        # Country configuration - AUS
-        - name: COUNTRY_AUS_LOOKBACK
-          valueFrom:
-            secretKeyRef:
-              name: aws-secret-smmarketvalue
-              key: COUNTRY_AUS_LOOKBACK
-        - name: COUNTRY_AUS_MODEL
-          valueFrom:
-            secretKeyRef:
-              name: aws-secret-smmarketvalue
-              key: COUNTRY_AUS_MODEL
-        # Country configuration - USA
-        - name: COUNTRY_USA_LOOKBACK
-          valueFrom:
-            secretKeyRef:
-              name: aws-secret-smmarketvalue
-              key: COUNTRY_USA_LOOKBACK
-        - name: COUNTRY_USA_MODEL
-          valueFrom:
-            secretKeyRef:
-              name: aws-secret-smmarketvalue
-              key: COUNTRY_USA_MODEL
         # API
         - name: API_KEY
           valueFrom:
             secretKeyRef:
               name: aws-secret-smmarketvalue
               key: API_KEY
+        # Email OTP authentication
+        - name: EMAIL_SERVICE_URL
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: EMAIL_SERVICE_URL
+        - name: EMAIL_SERVICE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: EMAIL_SERVICE_API_KEY
+        - name: AUTH_EMAIL_WHITELIST
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: AUTH_EMAIL_WHITELIST
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: JWT_SECRET
+        - name: JWT_EXPIRY_HOURS
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: JWT_EXPIRY_HOURS
+        - name: AUTH_DEV_MODE
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: AUTH_DEV_MODE

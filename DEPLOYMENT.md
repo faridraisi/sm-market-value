@@ -1,5 +1,7 @@
 # Running & Deploying Market Value Model
 
+**Production URL:** https://smmarketvalue.stallionmatch.horse
+
 ## Running the Pipeline
 
 ### Score a Sale (Full Pipeline)
@@ -203,3 +205,157 @@ WHERE salesId = 2094;
 4. [ ] Spot check a few horses manually
 5. [ ] Run with `--output db` to deploy
 6. [ ] Verify records in `tblHorseAnalytics`
+
+---
+
+## EKS Deployment
+
+Deploy the API to the `data-feed` EKS cluster.
+
+### Prerequisites
+
+- AWS CLI configured with appropriate credentials
+- `kubectl` configured for the `data-feed` EKS cluster
+- Docker installed
+
+```bash
+# Verify cluster access
+kubectl get nodes
+```
+
+### 1. Create ECR Repository (first time only)
+
+```bash
+aws ecr create-repository \
+    --repository-name smmarketvalue \
+    --region ap-southeast-2
+```
+
+### 2. Build and Push Docker Image
+
+```bash
+# Navigate to project root
+cd /path/to/sm-market-value
+
+# Login to ECR
+aws ecr get-login-password --region ap-southeast-2 | \
+    docker login --username AWS --password-stdin 398646198502.dkr.ecr.ap-southeast-2.amazonaws.com
+
+# Build image (from project root, using Dockerfile)
+docker build -t smmarketvalue:latest .
+
+# Tag for ECR
+docker tag smmarketvalue:latest \
+    398646198502.dkr.ecr.ap-southeast-2.amazonaws.com/smmarketvalue:latest
+
+# Push to ECR
+docker push 398646198502.dkr.ecr.ap-southeast-2.amazonaws.com/smmarketvalue:latest
+```
+
+### 3. Create Kubernetes Secret
+
+```bash
+./create-k8s-secret.sh
+```
+
+Or manually (replace with actual values):
+
+```bash
+kubectl create secret generic aws-secret-smmarketvalue \
+    --from-literal=DB_SERVER='your-db-server' \
+    --from-literal=DB_NAME='G1StallionMatchProductionV5' \
+    --from-literal=DB_USER='your-username' \
+    --from-literal=DB_PASSWORD='your-password' \
+    --from-literal=AUDIT_USER_ID='2' \
+    --from-literal=COUNTRY_NZL_LOOKBACK='AUS,NZL' \
+    --from-literal=COUNTRY_NZL_MODEL='nzl' \
+    --from-literal=COUNTRY_AUS_LOOKBACK='AUS' \
+    --from-literal=COUNTRY_AUS_MODEL='aus' \
+    --from-literal=COUNTRY_USA_LOOKBACK='USA' \
+    --from-literal=COUNTRY_USA_MODEL='usa' \
+    --from-literal=API_KEY='your-api-key'
+```
+
+### 4. Deploy to Kubernetes
+
+```bash
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+
+# Verify deployment
+kubectl get pods -l app=smmarketvalue
+kubectl get svc smmarketvalue-service
+```
+
+### 5. Get Load Balancer URL
+
+```bash
+kubectl get svc smmarketvalue-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+```
+### Updating the Application
+
+**All in One:**
+```bash
+echo "Switching to 'default' profile (Account: 398646198502)..."
+export AWS_PROFILE=default
+aws sts get-caller-identity
+aws eks list-clusters --region ap-southeast-2
+aws eks update-kubeconfig --name data-feed --region ap-southeast-2 --profile default
+kubectl get nodes
+kubectl get pods
+
+cd /Users/fs/Projects/sm-market-value && \
+docker build -t smmarketvalue . && \
+docker tag smmarketvalue:latest 398646198502.dkr.ecr.ap-southeast-2.amazonaws.com/smmarketvalue:latest && \
+aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS --password-stdin 398646198502.dkr.ecr.ap-southeast-2.amazonaws.com && \
+docker push 398646198502.dkr.ecr.ap-southeast-2.amazonaws.com/smmarketvalue:latest && \
+kubectl set image deployment/smmarketvalue smmarketvalue=398646198502.dkr.ecr.ap-southeast-2.amazonaws.com/smmarketvalue:latest && \
+kubectl rollout restart deployment smmarketvalue && \
+kubectl get pods
+```
+
+
+### Update Deployment
+
+```bash
+# Build and push new image
+docker build -t smmarketvalue:latest .
+docker tag smmarketvalue:latest 398646198502.dkr.ecr.ap-southeast-2.amazonaws.com/smmarketvalue:latest
+docker push 398646198502.dkr.ecr.ap-southeast-2.amazonaws.com/smmarketvalue:latest
+
+# Restart deployment to pull new image
+kubectl rollout restart deployment/smmarketvalue
+kubectl rollout status deployment/smmarketvalue
+```
+
+### Update Secrets
+
+```bash
+kubectl delete secret aws-secret-smmarketvalue
+./create-k8s-secret.sh
+kubectl rollout restart deployment/smmarketvalue
+```
+
+### Custom Domain
+
+To use `sm-market-value.stallionmatch.horse`:
+
+1. Get Load Balancer hostname:
+   ```bash
+   kubectl get svc smmarketvalue-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+   ```
+
+2. In Route53, create a CNAME record pointing `sm-market-value.stallionmatch.horse` to the Load Balancer hostname.
+
+### EKS Troubleshooting
+
+```bash
+# Pod status
+kubectl describe pod -l app=smmarketvalue
+
+# View logs
+kubectl logs -l app=smmarketvalue -f
+
+# Test DB connection
+kubectl exec -it <pod-name> -- python -c "from src.score_sale import get_db_connection; get_db_connection()"
+```

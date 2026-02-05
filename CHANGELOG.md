@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.10.0] - 2026-02-05
+
+### Added
+- **EKS Deployment** - Kubernetes deployment to `data-feed` cluster:
+  - `Dockerfile` with MSSQL ODBC drivers and LightGBM support
+  - `deployment.yaml` and `service.yaml` for Kubernetes
+  - `create-k8s-secret.sh` for secret management
+  - LoadBalancer with SSL termination (port 443)
+  - Production URL: `https://smmarketvalue.stallionmatch.horse`
+  - Route53 CNAME record configured
+- **Session median fallback** - Auto-lookup previous year's median for pre-sale scoring when no sold lots exist
+
+### Changed
+- `api.py` moved from `src/` to project root
+- Dockerfile CMD updated to `uvicorn api:app`
+
 ## [2.9.0] - 2026-02-04
 
 ### Added

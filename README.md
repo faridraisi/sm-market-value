@@ -2,6 +2,8 @@
 
 Predict expected yearling sale prices with confidence ranges.
 
+**Production URL:** https://smmarketvalue.stallionmatch.horse
+
 **Supported Countries:** AUS, NZL, USA, GBR, IRE, FRA, GER, ZAF, JPN, CAN, HKG
 
 ---
@@ -553,6 +555,10 @@ Check that `session_median_price` is set in your inference CSV. Future sales req
 
 | Version | Date | Changes |
 |---------|------|---------|
+| V2.10 | Feb 2026 | **EKS Deployment** to `data-feed` cluster. Production URL: `https://smmarketvalue.stallionmatch.horse`. Session median fallback to prior year for future sales. |
+| V2.9 | Feb 2026 | **Email OTP authentication** - JWT tokens via email login. Dual auth support (API key + JWT). |
+| V2.8 | Feb 2026 | **Model upload/download/delete endpoints** for CI/CD and backup workflows. |
+| V2.7.1 | Feb 2026 | **Session median override** - Optional `session_median` query parameter for scoring endpoints. |
 | V2.7 | Feb 2026 | Simplified Config API: `GET/POST/PUT/DELETE /api/config/{country}` replaces granular endpoints. |
 | V2.6 | Feb 2026 | Added `POST /api/score/{sale_id}/commit` endpoint for selective lot commit. Added `mv_expected_index` to score response. |
 | V2.4 | Jan 2025 | Centralized config (`config.json` + `.env`). Added API endpoints for training, model listing, and runtime config management. |

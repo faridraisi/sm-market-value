@@ -56,11 +56,12 @@ def get_connection():
         raise ValueError("Missing required database credentials in .env file")
 
     conn_str = (
-        f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+        f"DRIVER={{ODBC Driver 18 for SQL Server}};"
         f"SERVER={db.server};"
         f"DATABASE={db.name};"
         f"UID={db.user};"
-        f"PWD={db.password}"
+        f"PWD={db.password};"
+        f"TrustServerCertificate=yes"
     )
     return pyodbc.connect(conn_str)
 

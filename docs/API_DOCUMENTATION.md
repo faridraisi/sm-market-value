@@ -2,8 +2,8 @@
 
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
-**Base URL:** `http://localhost:8000` (development) or your production server
-**API Version:** 2.9.0
+**Base URL:** `http://localhost:8000` (development) or `https://smmarketvalue.stallionmatch.horse` (production)
+**API Version:** 2.10.0
 
 ---
 
@@ -1510,9 +1510,15 @@ curl -X DELETE "http://localhost:8000/api/config/GBR" \
 
 The API provides auto-generated documentation at:
 
+**Development:**
 - **Swagger UI:** `http://localhost:8000/docs`
 - **ReDoc:** `http://localhost:8000/redoc`
 - **OpenAPI JSON:** `http://localhost:8000/openapi.json`
+
+**Production:**
+- **Swagger UI:** `https://smmarketvalue.stallionmatch.horse/docs`
+- **ReDoc:** `https://smmarketvalue.stallionmatch.horse/redoc`
+- **OpenAPI JSON:** `https://smmarketvalue.stallionmatch.horse/openapi.json`
 
 ---
 
