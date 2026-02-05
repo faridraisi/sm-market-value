@@ -1,189 +1,612 @@
 {
-  "info": {
-    "name": "sm-market-value",
-    "description": "API for scoring yearling lots for market value prediction",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-  },
-  "variable": [
-    {
-      "key": "local_url",
-      "value": "http://localhost:8000",
-      "type": "string"
-    },
-    {
-      "key": "remote_url",
-      "value": "https://smmarketvalue.stallionmatch.horse",
-      "type": "string"
-    },
-    {
-      "key": "base_url",
-      "value": "{{remote_url}}",
-      "type": "string",
-      "description": "Switch between {{local_url}} and {{remote_url}}"
-    },
-    {
-      "key": "api_key",
-      "value": "BJgvUFhQqB1OGDcSmnDdGKC6q_uxgTDUYrQaeP7EMpw",
-      "type": "string"
-    }
-  ],
-  "item": [
-    {
-      "name": "Health Check",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{base_url}}/health",
-          "host": ["{{base_url}}"],
-          "path": ["health"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Score Sale (with DB write)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "X-API-Key",
-            "value": "{{api_key}}",
-            "type": "text"
-          }
-        ],
-        "url": {
-          "raw": "{{base_url}}/api/score/2098?write_to_db=true",
-          "host": ["{{base_url}}"],
-          "path": ["api", "score", "2098"],
-          "query": [
-            {
-              "key": "write_to_db",
-              "value": "true",
-              "description": "Write results to tblHorseAnalytics"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Score Sale (Dry Run)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "X-API-Key",
-            "value": "{{api_key}}",
-            "type": "text"
-          }
-        ],
-        "url": {
-          "raw": "{{base_url}}/api/score/2098?write_to_db=false",
-          "host": ["{{base_url}}"],
-          "path": ["api", "score", "2098"],
-          "query": [
-            {
-              "key": "write_to_db",
-              "value": "false",
-              "description": "Return JSON only, do not write to database"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Score Sale (Pre-sale with session median)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "X-API-Key",
-            "value": "{{api_key}}",
-            "type": "text"
-          }
-        ],
-        "url": {
-          "raw": "{{base_url}}/api/score/2098?write_to_db=false&session_median=360000",
-          "host": ["{{base_url}}"],
-          "path": ["api", "score", "2098"],
-          "query": [
-            {
-              "key": "write_to_db",
-              "value": "false"
-            },
-            {
-              "key": "session_median",
-              "value": "360000",
-              "description": "Override session median for pre-sale scoring"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Score NZL Sale (pooled lookback)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "X-API-Key",
-            "value": "{{api_key}}",
-            "type": "text"
-          }
-        ],
-        "url": {
-          "raw": "{{base_url}}/api/score/2096?write_to_db=false&session_median=50000",
-          "host": ["{{base_url}}"],
-          "path": ["api", "score", "2096"],
-          "query": [
-            {
-              "key": "write_to_db",
-              "value": "false"
-            },
-            {
-              "key": "session_median",
-              "value": "50000",
-              "description": "NZL sale - uses AUS+NZL lookback"
-            }
-          ]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Invalid API Key (should fail)",
-      "request": {
-        "method": "POST",
-        "header": [
-          {
-            "key": "X-API-Key",
-            "value": "invalid-key",
-            "type": "text"
-          }
-        ],
-        "url": {
-          "raw": "{{base_url}}/api/score/2098",
-          "host": ["{{base_url}}"],
-          "path": ["api", "score", "2098"]
-        }
-      },
-      "response": []
-    },
-    {
-      "name": "Swagger Docs",
-      "request": {
-        "method": "GET",
-        "header": [],
-        "url": {
-          "raw": "{{base_url}}/docs",
-          "host": ["{{base_url}}"],
-          "path": ["docs"]
-        }
-      },
-      "response": []
-    }
-  ]
+	"info": {
+		"name": "sm-market-value",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000"
+		},
+		{
+			"key": "api_key",
+			"value": "your-api-key"
+		},
+		{
+			"key": "jwt_token",
+			"value": ""
+		}
+	],
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Request OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"test@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/request-otp",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "request-otp"]
+						}
+					}
+				},
+				{
+					"name": "Verify OTP",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.access_token) {",
+									"    pm.collectionVariables.set('jwt_token', jsonData.access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"test@example.com\",\n  \"code\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/verify-otp",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "verify-otp"]
+						}
+					}
+				},
+				{
+					"name": "Test JWT Auth",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Health & Scoring",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Score Sale (JSON only)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2094",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2094"]
+						}
+					}
+				},
+				{
+					"name": "Score Sale (CSV output)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2094?output=csv",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2094"],
+							"query": [
+								{
+									"key": "output",
+									"value": "csv"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Score Sale (DB output)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2094?output=db",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2094"],
+							"query": [
+								{
+									"key": "output",
+									"value": "db"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Score Sale (with session median override)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2100?session_median=20000",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2100"],
+							"query": [
+								{
+									"key": "session_median",
+									"value": "20000"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Compare with Existing Values",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/score/2101/compare",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2101", "compare"],
+							"query": [
+								{
+									"key": "session_median",
+									"value": "20000",
+									"disabled": true
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Commit Selected Lots",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"lots\": [\n    {\n      \"horse_id\": 789012,\n      \"sales_id\": 2094,\n      \"mv_expected_price\": 120000,\n      \"mv_low_price\": 75000,\n      \"mv_high_price\": 195000,\n      \"mv_expected_index\": 1.41,\n      \"mv_confidence_tier\": \"medium\",\n      \"session_median_price\": 85000\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/score/2094/commit",
+							"host": ["{{base_url}}"],
+							"path": ["api", "score", "2094", "commit"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Training",
+			"item": [
+				{
+					"name": "Train Model (auto version)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/train/aus",
+							"host": ["{{base_url}}"],
+							"path": ["api", "train", "aus"]
+						}
+					}
+				},
+				{
+					"name": "Train Model (specific version)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/train/aus?version=v5",
+							"host": ["{{base_url}}"],
+							"path": ["api", "train", "aus"],
+							"query": [
+								{
+									"key": "version",
+									"value": "v5"
+								}
+							]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Models",
+			"item": [
+				{
+					"name": "List Models (AUS)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/models/aus",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "aus"]
+						}
+					}
+				},
+				{
+					"name": "List Models (NZL)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/models/nzl",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "nzl"]
+						}
+					}
+				},
+				{
+					"name": "Download Model",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/models/aus_v8/download",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "aus_v8", "download"]
+						}
+					}
+				},
+				{
+					"name": "Upload Model",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": ""
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/models/aus_v9",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "aus_v9"]
+						}
+					}
+				},
+				{
+					"name": "Delete Model",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/models/aus_v9",
+							"host": ["{{base_url}}"],
+							"path": ["api", "models", "aus_v9"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Config",
+			"item": [
+				{
+					"name": "Get Full Config",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config"]
+						}
+					}
+				},
+				{
+					"name": "Get Year Range",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/years",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "years"]
+						}
+					}
+				},
+				{
+					"name": "Set Year Range",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/years?year_start=2020&year_end=2027",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "years"],
+							"query": [
+								{
+									"key": "year_start",
+									"value": "2020"
+								},
+								{
+									"key": "year_end",
+									"value": "2027"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Test Years",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/test-years",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "test-years"]
+						}
+					}
+				},
+				{
+					"name": "Set Test Years",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/test-years?model_test_last_years=2",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "test-years"],
+							"query": [
+								{
+									"key": "model_test_last_years",
+									"value": "2"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Region Config (AUS)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/AUS",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "AUS"]
+						}
+					}
+				},
+				{
+					"name": "Update Region Config (partial)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"aus_v5\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/config/AUS",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "AUS"]
+						}
+					}
+				},
+				{
+					"name": "Update Elite Scaling (nested partial)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"elite_scaling\": {\n    \"threshold\": 600000\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/config/AUS",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "AUS"]
+						}
+					}
+				},
+				{
+					"name": "Create New Region",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"gbr\",\n  \"currency_id\": 2,\n  \"hist_countries\": [\"GBR\"],\n  \"elite_scaling\": {\n    \"threshold\": 400000,\n    \"base_offset\": 0.25,\n    \"scaling_factor\": 0.5\n  },\n  \"confidence_tiers\": {\n    \"close_threshold\": 0.7,\n    \"extreme_threshold\": 1.0\n  },\n  \"sire_sample_min_count\": 10\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/config/GBR",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "GBR"]
+						}
+					}
+				},
+				{
+					"name": "Delete Region",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/GBR",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "GBR"]
+						}
+					}
+				}
+			]
+		}
+	]
 }

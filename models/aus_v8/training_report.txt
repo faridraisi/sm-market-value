@@ -1,0 +1,71 @@
+============================================================
+MARKET VALUE MODEL — TRAINING REPORT (AUS)
+============================================================
+Generated: 2026-01-30 16:28:47
+Model Version: v8
+Country: AUS
+
+DATA
+------------------------------------------------------------
+Total samples: 25,281
+Train: 18,394 rows
+Validation: 2,044 rows
+Test: 4,843 rows
+Features: 28
+
+BASELINE MODEL: Elastic Net
+------------------------------------------------------------
+Train MAE: 0.6278
+Train R²:  0.1539
+Test MAE:  0.6377
+Test R²:   0.1863
+Naive MAE: 0.7136
+✓ Baseline passes: Better than naive predictor
+
+QUANTILE MODELS
+------------------------------------------------------------
+Q25: 436 trees (early stopped)
+Q50: 368 trees (early stopped)
+Q75: 264 trees (early stopped)
+
+MODEL EVALUATION
+------------------------------------------------------------
+P50 (Expected) Performance:
+  MAE:  0.6135
+  RMSE: 0.7854
+  R²:   0.2422
+
+Coverage (before calibration):
+  % below P25: 26.6% (target: 25%)
+  % below P75: 71.1% (target: 75%)
+
+Dollar-space (P50):
+  MAPE: 82.4%
+
+CALIBRATION
+------------------------------------------------------------
+Offsets (log space):
+  P25: -0.0334
+  P75: 0.0926
+
+Calibrated coverage:
+  % below P25: 25.3% (target: 25%)
+  % below P75: 75.1% (target: 75%)
+
+FEATURE IMPORTANCE (Top 15)
+------------------------------------------------------------
+  sire_median_price_12m                    2,455.5
+  session_median_price                     1,806.8
+  vendor_median_price_36m                  1,410.8
+  dam_progeny_median_price                 1,235.6
+  vendor_clearance_rate_36m                1,168.5
+  vendor_sold_count_36m                    1,049.1
+  sire_median_price_36m                    1,003.2
+  vendor_total_offered_36m                 963.3
+  sire_clearance_rate_36m                  955.7
+  sire_sold_count_36m                      890.3
+  sire_total_offered_36m                   881.6
+  sire_momentum                            849.6
+  sire_clearance_rate_12m                  789.5
+  sire_sold_count_12m                      713.6
+  sire_total_offered_12m                   620.6
