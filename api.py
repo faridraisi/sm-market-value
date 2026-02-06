@@ -309,6 +309,7 @@ class SaleSearchResult(BaseModel):
     sale_name: str
     sale_date: Optional[str] = None
     country_code: str
+    currency_code: Optional[str] = None
     lot_count: int
     sale_company: str
     status: str  # "past" or "upcoming"
@@ -665,12 +666,14 @@ async def search_sales(
             SL.salesName AS sale_name,
             CAST(SL.startDate AS DATE) AS sale_date,
             CN.countryCode AS country_code,
+            CUR.currencyCode AS currency_code,
             SC.salescompanyName AS sale_company,
             (SELECT COUNT(*) FROM tblSalesLot LT
              WHERE LT.salesId = SL.Id) AS lot_count
         FROM tblSales SL
         JOIN tblCountry CN ON SL.countryId = CN.id
         JOIN tblSalesCompany SC ON SL.salesCompanyId = SC.Id
+        LEFT JOIN tblCurrency CUR ON CN.preferredCurrencyId = CUR.id
         WHERE SL.salesName LIKE ? OR SC.salescompanyName LIKE ?
         ORDER BY SL.startDate DESC
     """
@@ -686,6 +689,7 @@ async def search_sales(
             sale_name=row.sale_name,
             sale_date=str(row.sale_date) if row.sale_date else None,
             country_code=row.country_code,
+            currency_code=row.currency_code,
             lot_count=row.lot_count,
             sale_company=row.sale_company,
             status="upcoming" if row.sale_date and row.sale_date >= today else "past"

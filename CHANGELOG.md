@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - **Config: `sale_history_years`** - Number of years of history to include (default 5, set to 0 to disable)
 - **Config endpoints** `GET/PUT /api/config/sale-history-years` for runtime configuration
 - **Prior year dates** - `start_date` and `end_date` fields in `prior_year` object
+- **Currency in search** - `currency_code` field added to sale search results
 
 ## [2.11.0] - 2026-02-06
 

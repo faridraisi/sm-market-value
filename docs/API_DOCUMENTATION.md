@@ -241,6 +241,7 @@ GET /api/sales/search
       "sale_name": "Gold Coast Yearling Sale",
       "sale_date": "2026-01-13",
       "country_code": "AUS",
+      "currency_code": "AUD",
       "lot_count": 1221,
       "sale_company": "Magic Millions",
       "status": "past"
@@ -250,6 +251,7 @@ GET /api/sales/search
       "sale_name": "Gold Coast March Yearling Sale",
       "sale_date": "2026-03-12",
       "country_code": "AUS",
+      "currency_code": "AUD",
       "lot_count": 490,
       "sale_company": "Magic Millions",
       "status": "upcoming"
@@ -268,6 +270,7 @@ GET /api/sales/search
 | `results[].sale_name` | string | Full sale name |
 | `results[].sale_date` | string\|null | Sale start date (YYYY-MM-DD) |
 | `results[].country_code` | string | Country code (e.g., `AUS`, `NZL`) |
+| `results[].currency_code` | string\|null | Currency code (e.g., `AUD`, `NZD`, `USD`) |
 | `results[].lot_count` | integer | Number of lots in the sale |
 | `results[].sale_company` | string | Sale company name |
 | `results[].status` | string | `"upcoming"` if sale_date >= today, otherwise `"past"` |
