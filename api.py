@@ -333,12 +333,42 @@ class SaleLotStats(BaseModel):
     clearance_rate: Optional[float] = None  # sold / (total - withdrawn) * 100
 
 
+class SalePriceBands(BaseModel):
+    under_50k: int = 0
+    band_50k_100k: int = 0
+    band_100k_200k: int = 0
+    band_200k_500k: int = 0
+    band_500k_1m: int = 0
+    over_1m: int = 0
+
+
 class SalePriceStats(BaseModel):
     gross: Optional[float] = None
     avg_price: Optional[float] = None
     median_price: Optional[float] = None
+    q1_price: Optional[float] = None  # 25th percentile
+    q3_price: Optional[float] = None  # 75th percentile
     min_price: Optional[float] = None
     max_price: Optional[float] = None
+    top10_avg: Optional[float] = None  # Average of top 10 prices
+    std_dev: Optional[float] = None  # Standard deviation
+    price_bands: Optional[SalePriceBands] = None
+
+
+class YoyChange(BaseModel):
+    gross_pct: Optional[float] = None
+    avg_price_pct: Optional[float] = None
+    median_price_pct: Optional[float] = None
+    sold_count_change: Optional[int] = None
+    clearance_rate_change: Optional[float] = None
+
+
+class PriorYearStats(BaseModel):
+    sale_ids: list[int]  # Could be multiple matching sales
+    sale_names: list[str]
+    lot_stats: SaleLotStats
+    price_stats: Optional[SalePriceStats] = None
+    yoy_change: Optional[YoyChange] = None
 
 
 class SaleQueueStats(BaseModel):
@@ -368,6 +398,7 @@ class SaleDetailResponse(BaseModel):
     status: str  # "past" or "upcoming"
     lot_stats: SaleLotStats
     price_stats: Optional[SalePriceStats] = None
+    prior_year: Optional[PriorYearStats] = None
     queue_stats: Optional[SaleQueueStats] = None
     books: list[SaleBook]
 
@@ -639,12 +670,112 @@ async def search_sales(
     return SaleSearchResponse(query=q, results=results)
 
 
+def compute_price_stats(cursor, sale_ids: list[int]) -> tuple[SalePriceStats | None, int, int, int, int, float | None]:
+    """
+    Compute enhanced price stats for one or more sales.
+    Returns (price_stats, total_lots, sold_count, passed_in_count, withdrawn_count, clearance_rate)
+    """
+    placeholders = ",".join("?" * len(sale_ids))
+
+    # Get lot statistics
+    stats_query = f"""
+        SELECT
+            COUNT(*) AS total_lots,
+            SUM(CASE WHEN isWithdrawn = 1 THEN 1 ELSE 0 END) AS withdrawn_count,
+            SUM(CASE WHEN ISNULL(isWithdrawn, 0) = 0 AND isPassedIn = 1 THEN 1 ELSE 0 END) AS passed_in_count,
+            SUM(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN 1 ELSE 0 END) AS sold_count,
+            SUM(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price ELSE 0 END) AS gross,
+            AVG(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN CAST(price AS FLOAT) END) AS avg_price,
+            MIN(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price END) AS min_price,
+            MAX(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price END) AS max_price,
+            STDEV(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN CAST(price AS FLOAT) END) AS std_dev,
+            -- Price bands
+            SUM(CASE WHEN price > 0 AND price < 50000 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN 1 ELSE 0 END) AS under_50k,
+            SUM(CASE WHEN price >= 50000 AND price < 100000 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN 1 ELSE 0 END) AS band_50k_100k,
+            SUM(CASE WHEN price >= 100000 AND price < 200000 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN 1 ELSE 0 END) AS band_100k_200k,
+            SUM(CASE WHEN price >= 200000 AND price < 500000 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN 1 ELSE 0 END) AS band_200k_500k,
+            SUM(CASE WHEN price >= 500000 AND price < 1000000 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN 1 ELSE 0 END) AS band_500k_1m,
+            SUM(CASE WHEN price >= 1000000 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN 1 ELSE 0 END) AS over_1m
+        FROM tblSalesLot
+        WHERE salesId IN ({placeholders})
+    """
+    cursor.execute(stats_query, sale_ids)
+    stats_row = cursor.fetchone()
+
+    total_lots = stats_row.total_lots or 0
+    withdrawn = stats_row.withdrawn_count or 0
+    passed_in = stats_row.passed_in_count or 0
+    sold = stats_row.sold_count or 0
+
+    # Clearance rate: sold / (total - withdrawn)
+    eligible_lots = total_lots - withdrawn
+    clearance_rate = round(100.0 * sold / eligible_lots, 1) if eligible_lots > 0 else None
+
+    if sold == 0:
+        return None, total_lots, sold, passed_in, withdrawn, clearance_rate
+
+    # Get quartiles (Q1, median, Q3) - separate query for PERCENTILE_CONT
+    quartiles_query = f"""
+        SELECT DISTINCT
+            PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY price) OVER () AS q1_price,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) OVER () AS median_price,
+            PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY price) OVER () AS q3_price
+        FROM tblSalesLot
+        WHERE salesId IN ({placeholders})
+          AND price > 0
+          AND ISNULL(isWithdrawn, 0) = 0
+          AND ISNULL(isPassedIn, 0) = 0
+    """
+    cursor.execute(quartiles_query, sale_ids)
+    quartiles_row = cursor.fetchone()
+
+    # Get top 10 average
+    top10_query = f"""
+        SELECT AVG(CAST(price AS FLOAT)) AS top10_avg
+        FROM (
+            SELECT TOP 10 price
+            FROM tblSalesLot
+            WHERE salesId IN ({placeholders})
+              AND price > 0
+              AND ISNULL(isWithdrawn, 0) = 0
+              AND ISNULL(isPassedIn, 0) = 0
+            ORDER BY price DESC
+        ) t
+    """
+    cursor.execute(top10_query, sale_ids)
+    top10_row = cursor.fetchone()
+
+    price_bands = SalePriceBands(
+        under_50k=stats_row.under_50k or 0,
+        band_50k_100k=stats_row.band_50k_100k or 0,
+        band_100k_200k=stats_row.band_100k_200k or 0,
+        band_200k_500k=stats_row.band_200k_500k or 0,
+        band_500k_1m=stats_row.band_500k_1m or 0,
+        over_1m=stats_row.over_1m or 0,
+    )
+
+    price_stats = SalePriceStats(
+        gross=round(stats_row.gross, 2) if stats_row.gross else None,
+        avg_price=round(stats_row.avg_price, 2) if stats_row.avg_price else None,
+        median_price=round(quartiles_row.median_price, 2) if quartiles_row and quartiles_row.median_price else None,
+        q1_price=round(quartiles_row.q1_price, 2) if quartiles_row and quartiles_row.q1_price else None,
+        q3_price=round(quartiles_row.q3_price, 2) if quartiles_row and quartiles_row.q3_price else None,
+        min_price=round(stats_row.min_price, 2) if stats_row.min_price else None,
+        max_price=round(stats_row.max_price, 2) if stats_row.max_price else None,
+        top10_avg=round(top10_row.top10_avg, 2) if top10_row and top10_row.top10_avg else None,
+        std_dev=round(stats_row.std_dev, 2) if stats_row.std_dev else None,
+        price_bands=price_bands,
+    )
+
+    return price_stats, total_lots, sold, passed_in, withdrawn, clearance_rate
+
+
 @app.get("/api/sales/{sale_id}", response_model=SaleDetailResponse)
 async def get_sale_detail(
     sale_id: int,
     _auth: None = Security(verify_auth),
 ):
-    """Get detailed information about a sale."""
+    """Get detailed information about a sale including enhanced price stats and prior year comparison."""
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -658,6 +789,8 @@ async def get_sale_detail(
             CAST(SL.endDate AS DATE) AS end_date,
             SL.isOnlineSales AS is_online,
             SL.isPublic AS is_public,
+            SL.salesCompanyId AS sales_company_id,
+            SL.salesTypeId AS sales_type_id,
             SC.salescompanyName AS sale_company,
             SC.salescompanyWebsite AS company_website,
             CN.countryCode AS country_code,
@@ -681,36 +814,16 @@ async def get_sale_detail(
         conn.close()
         raise HTTPException(status_code=404, detail=f"Sale {sale_id} not found")
 
-    # Get lot statistics
-    stats_query = """
-        SELECT
-            COUNT(*) AS total_lots,
-            SUM(CASE WHEN isWithdrawn = 1 THEN 1 ELSE 0 END) AS withdrawn_count,
-            SUM(CASE WHEN ISNULL(isWithdrawn, 0) = 0 AND isPassedIn = 1 THEN 1 ELSE 0 END) AS passed_in_count,
-            SUM(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN 1 ELSE 0 END) AS sold_count,
-            SUM(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price ELSE 0 END) AS gross,
-            AVG(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price END) AS avg_price,
-            MIN(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price END) AS min_price,
-            MAX(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price END) AS max_price
-        FROM tblSalesLot
-        WHERE salesId = ?
-    """
-    cursor.execute(stats_query, (sale_id,))
-    stats_row = cursor.fetchone()
+    # Compute price stats for current sale
+    price_stats, total_lots, sold, passed_in, withdrawn, clearance_rate = compute_price_stats(cursor, [sale_id])
 
-    # Get median price (separate query for PERCENTILE_CONT)
-    median_query = """
-        SELECT DISTINCT
-            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) OVER () AS median_price
-        FROM tblSalesLot
-        WHERE salesId = ?
-          AND price > 0
-          AND ISNULL(isWithdrawn, 0) = 0
-          AND ISNULL(isPassedIn, 0) = 0
-    """
-    cursor.execute(median_query, (sale_id,))
-    median_row = cursor.fetchone()
-    median_price = median_row.median_price if median_row else None
+    lot_stats = SaleLotStats(
+        total_lots=total_lots,
+        sold_count=sold,
+        passed_in_count=passed_in,
+        withdrawn_count=withdrawn,
+        clearance_rate=clearance_rate,
+    )
 
     # Get book breakdown
     books_query = """
@@ -731,40 +844,85 @@ async def get_sale_detail(
     """
     cursor.execute(queue_query, (sale_id,))
     queue_row = cursor.fetchone()
+
+    # Find prior year sales (same company, type, and month from previous year)
+    prior_year = None
+    if sale_row.start_date and sale_row.sales_company_id and sale_row.sales_type_id:
+        prior_year_query = """
+            SELECT Id, salesName
+            FROM tblSales
+            WHERE salesCompanyId = ?
+              AND salesTypeId = ?
+              AND MONTH(startDate) = MONTH(?)
+              AND YEAR(startDate) = YEAR(?) - 1
+        """
+        cursor.execute(prior_year_query, (
+            sale_row.sales_company_id,
+            sale_row.sales_type_id,
+            sale_row.start_date,
+            sale_row.start_date,
+        ))
+        prior_sales = cursor.fetchall()
+
+        if prior_sales:
+            prior_sale_ids = [row.Id for row in prior_sales]
+            prior_sale_names = [row.salesName for row in prior_sales]
+
+            # Compute stats for prior year sales
+            prior_price_stats, prior_total, prior_sold, prior_passed_in, prior_withdrawn, prior_clearance = compute_price_stats(
+                cursor, prior_sale_ids
+            )
+
+            prior_lot_stats = SaleLotStats(
+                total_lots=prior_total,
+                sold_count=prior_sold,
+                passed_in_count=prior_passed_in,
+                withdrawn_count=prior_withdrawn,
+                clearance_rate=prior_clearance,
+            )
+
+            # Calculate YoY changes
+            yoy_change = None
+            if price_stats and prior_price_stats:
+                gross_pct = None
+                if price_stats.gross and prior_price_stats.gross and prior_price_stats.gross > 0:
+                    gross_pct = round(100.0 * (price_stats.gross - prior_price_stats.gross) / prior_price_stats.gross, 1)
+
+                avg_pct = None
+                if price_stats.avg_price and prior_price_stats.avg_price and prior_price_stats.avg_price > 0:
+                    avg_pct = round(100.0 * (price_stats.avg_price - prior_price_stats.avg_price) / prior_price_stats.avg_price, 1)
+
+                median_pct = None
+                if price_stats.median_price and prior_price_stats.median_price and prior_price_stats.median_price > 0:
+                    median_pct = round(100.0 * (price_stats.median_price - prior_price_stats.median_price) / prior_price_stats.median_price, 1)
+
+                sold_change = sold - prior_sold if sold and prior_sold else None
+
+                clearance_change = None
+                if clearance_rate is not None and prior_clearance is not None:
+                    clearance_change = round(clearance_rate - prior_clearance, 1)
+
+                yoy_change = YoyChange(
+                    gross_pct=gross_pct,
+                    avg_price_pct=avg_pct,
+                    median_price_pct=median_pct,
+                    sold_count_change=sold_change,
+                    clearance_rate_change=clearance_change,
+                )
+
+            prior_year = PriorYearStats(
+                sale_ids=prior_sale_ids,
+                sale_names=prior_sale_names,
+                lot_stats=prior_lot_stats,
+                price_stats=prior_price_stats,
+                yoy_change=yoy_change,
+            )
+
     conn.close()
 
     # Build response
     today = datetime.now().date()
     start_date = sale_row.start_date
-
-    # Lot stats
-    total_lots = stats_row.total_lots or 0
-    withdrawn = stats_row.withdrawn_count or 0
-    passed_in = stats_row.passed_in_count or 0
-    sold = stats_row.sold_count or 0
-
-    # Clearance rate: sold / (total - withdrawn)
-    eligible_lots = total_lots - withdrawn
-    clearance_rate = round(100.0 * sold / eligible_lots, 1) if eligible_lots > 0 else None
-
-    lot_stats = SaleLotStats(
-        total_lots=total_lots,
-        sold_count=sold,
-        passed_in_count=passed_in,
-        withdrawn_count=withdrawn,
-        clearance_rate=clearance_rate,
-    )
-
-    # Price stats (only if there are sold lots)
-    price_stats = None
-    if sold > 0:
-        price_stats = SalePriceStats(
-            gross=round(stats_row.gross, 2) if stats_row.gross else None,
-            avg_price=round(stats_row.avg_price, 2) if stats_row.avg_price else None,
-            median_price=round(median_price, 2) if median_price else None,
-            min_price=round(stats_row.min_price, 2) if stats_row.min_price else None,
-            max_price=round(stats_row.max_price, 2) if stats_row.max_price else None,
-        )
 
     # Books
     books = [
@@ -806,6 +964,7 @@ async def get_sale_detail(
         status="upcoming" if start_date and start_date >= today else "past",
         lot_stats=lot_stats,
         price_stats=price_stats,
+        prior_year=prior_year,
         queue_stats=queue_stats,
         books=books,
     )

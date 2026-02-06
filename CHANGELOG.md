@@ -13,7 +13,15 @@ All notable changes to this project will be documented in this file.
 - **Sale Detail Endpoint** `GET /api/sales/{sale_id}` for detailed sale information:
   - Basic info: sale_code, name, dates, type, status, company, country, currency
   - Lot stats: total, sold, passed in, withdrawn, clearance rate
-  - Price stats (past sales): gross, avg, median, min, max
+  - **Enhanced price stats** (past sales):
+    - Basic: gross, avg, median, min, max
+    - Quartiles: q1_price (25th percentile), q3_price (75th percentile)
+    - Advanced: top10_avg, std_dev
+    - Price bands: under_50k, 50k-100k, 100k-200k, 200k-500k, 500k-1m, over_1m
+  - **Prior year comparison** (matched by company + type + month):
+    - Prior year sale_ids and names
+    - Prior year lot_stats and price_stats
+    - YoY changes: gross_pct, avg_price_pct, median_price_pct, sold_count_change, clearance_rate_change
   - Queue stats: report generation status (completed, in_queue, failed, postponed)
   - Book/session breakdown with lot counts per day
 

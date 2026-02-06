@@ -19,7 +19,7 @@
 		},
 		{
 			"key": "api_key",
-			"value": "your-api-key"
+			"value": "{{api_key_market_value}}"
 		},
 		{
 			"key": "jwt_token",

@@ -279,7 +279,7 @@ GET /api/sales/search
 
 ### Get Sale Detail
 
-Get detailed information about a sale including lot statistics, price statistics, and book breakdown.
+Get detailed information about a sale including lot statistics, enhanced price statistics, prior year comparison, and book breakdown.
 
 ```
 GET /api/sales/{sale_id}
@@ -294,49 +294,97 @@ GET /api/sales/{sale_id}
 **Response:**
 ```json
 {
-  "sale_id": 2002,
-  "sale_code": "MMGCYS26",
-  "sale_name": "Gold Coast Yearling Sale",
-  "start_date": "2026-01-13",
-  "end_date": "2026-01-19",
+  "sale_id": 789,
+  "sale_code": "INPY25",
+  "sale_name": "Premier Yearling Sale",
+  "start_date": "2025-03-02",
+  "end_date": "2025-03-04",
   "sale_type": "Yearling",
   "sale_status": "Verified",
   "is_online": false,
-  "is_public": true,
-  "sale_company": "Magic Millions",
-  "company_website": "https://magicmillions.com.au",
+  "is_public": false,
+  "sale_company": "Inglis",
+  "company_website": "https://inglis.com.au",
   "country_code": "AUS",
   "country_name": "Australia",
   "currency_code": "AUD",
   "currency_symbol": "$",
   "status": "past",
   "lot_stats": {
-    "total_lots": 1221,
-    "sold_count": 932,
-    "passed_in_count": 143,
-    "withdrawn_count": 146,
-    "clearance_rate": 86.7
+    "total_lots": 803,
+    "sold_count": 551,
+    "passed_in_count": 139,
+    "withdrawn_count": 113,
+    "clearance_rate": 79.9
   },
   "price_stats": {
-    "gross": 212885000.00,
-    "avg_price": 228417.38,
-    "median_price": 150000.00,
-    "min_price": 4000.00,
-    "max_price": 2000000.00
+    "gross": 60584137.0,
+    "avg_price": 109953.06,
+    "median_price": 80000.0,
+    "q1_price": 40000.0,
+    "q3_price": 150000.0,
+    "min_price": 3500.0,
+    "max_price": 1000000.0,
+    "top10_avg": 563000.0,
+    "std_dev": 109436.27,
+    "price_bands": {
+      "under_50k": 164,
+      "band_50k_100k": 155,
+      "band_100k_200k": 136,
+      "band_200k_500k": 92,
+      "band_500k_1m": 2,
+      "over_1m": 2
+    }
+  },
+  "prior_year": {
+    "sale_ids": [636],
+    "sale_names": ["Premier Yearling Sale"],
+    "lot_stats": {
+      "total_lots": 800,
+      "sold_count": 559,
+      "passed_in_count": 0,
+      "withdrawn_count": 0,
+      "clearance_rate": 69.9
+    },
+    "price_stats": {
+      "gross": 58373500.0,
+      "avg_price": 104424.87,
+      "median_price": 75000.0,
+      "q1_price": 40000.0,
+      "q3_price": 140000.0,
+      "min_price": 5000.0,
+      "max_price": 925000.0,
+      "top10_avg": 571500.0,
+      "std_dev": 105949.28,
+      "price_bands": {
+        "under_50k": 186,
+        "band_50k_100k": 159,
+        "band_100k_200k": 134,
+        "band_200k_500k": 72,
+        "band_500k_1m": 8,
+        "over_1m": 0
+      }
+    },
+    "yoy_change": {
+      "gross_pct": 3.8,
+      "avg_price_pct": 5.3,
+      "median_price_pct": 6.7,
+      "sold_count_change": -8,
+      "clearance_rate_change": 10.0
+    }
   },
   "queue_stats": {
-    "completed": 1221,
+    "completed": 723,
     "in_queue": 0,
     "failed": 0,
     "postponed": 0,
-    "last_completed": "2026-02-05 10:16:02.213333"
+    "last_completed": "2025-12-02 03:29:12.743333"
   },
   "books": [
-    {"book_number": 1, "day_number": 1, "lot_count": 210},
-    {"book_number": 1, "day_number": 2, "lot_count": 240},
-    {"book_number": 1, "day_number": 3, "lot_count": 240},
-    {"book_number": 1, "day_number": 4, "lot_count": 290},
-    {"book_number": 2, "day_number": 5, "lot_count": 241}
+    {"book_number": 1, "day_number": 0, "lot_count": 87},
+    {"book_number": 1, "day_number": 1, "lot_count": 196},
+    {"book_number": 1, "day_number": 2, "lot_count": 282},
+    {"book_number": 2, "day_number": 3, "lot_count": 238}
   ]
 }
 ```
@@ -346,7 +394,7 @@ GET /api/sales/{sale_id}
 | Field | Type | Description |
 |-------|------|-------------|
 | `sale_id` | integer | Sale identifier |
-| `sale_code` | string\|null | Sale code (e.g., "MMGCYS26") |
+| `sale_code` | string\|null | Sale code (e.g., "INPY25") |
 | `sale_name` | string | Full sale name |
 | `start_date` | string\|null | Sale start date (YYYY-MM-DD) |
 | `end_date` | string\|null | Sale end date (YYYY-MM-DD) |
@@ -378,9 +426,47 @@ GET /api/sales/{sale_id}
 |-------|------|-------------|
 | `gross` | float\|null | Total gross revenue |
 | `avg_price` | float\|null | Average sale price |
-| `median_price` | float\|null | Median sale price |
+| `median_price` | float\|null | Median sale price (P50) |
+| `q1_price` | float\|null | 25th percentile price |
+| `q3_price` | float\|null | 75th percentile price |
 | `min_price` | float\|null | Lowest sale price |
 | `max_price` | float\|null | Highest sale price (top lot) |
+| `top10_avg` | float\|null | Average of top 10 prices |
+| `std_dev` | float\|null | Standard deviation of prices |
+| `price_bands` | object\|null | Distribution by price range |
+
+**Price Bands Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `under_50k` | integer | Lots sold under $50,000 |
+| `band_50k_100k` | integer | Lots sold $50,000-$99,999 |
+| `band_100k_200k` | integer | Lots sold $100,000-$199,999 |
+| `band_200k_500k` | integer | Lots sold $200,000-$499,999 |
+| `band_500k_1m` | integer | Lots sold $500,000-$999,999 |
+| `over_1m` | integer | Lots sold $1,000,000+ |
+
+**Prior Year Fields (null if no matching prior year sale):**
+
+Prior year is matched by: same company + same sale type + same month of the year.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sale_ids` | array | IDs of matching prior year sales |
+| `sale_names` | array | Names of matching prior year sales |
+| `lot_stats` | object | Aggregated lot statistics |
+| `price_stats` | object\|null | Aggregated price statistics |
+| `yoy_change` | object\|null | Year-over-year changes |
+
+**YoY Change Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gross_pct` | float\|null | Gross revenue change (%) |
+| `avg_price_pct` | float\|null | Average price change (%) |
+| `median_price_pct` | float\|null | Median price change (%) |
+| `sold_count_change` | integer\|null | Sold count difference (absolute) |
+| `clearance_rate_change` | float\|null | Clearance rate difference (percentage points) |
 
 **Queue Stats Fields (report generation status):**
 
@@ -402,7 +488,10 @@ GET /api/sales/{sale_id}
 
 **Notes:**
 - `price_stats` is `null` for upcoming sales with no sold lots
+- `prior_year` is `null` if no matching prior year sale found
+- `yoy_change` is `null` if either current or prior year has no price stats
 - `clearance_rate` is calculated as: sold ÷ (total - withdrawn) × 100
+- Positive `yoy_change` values indicate increase vs prior year
 
 ---
 
