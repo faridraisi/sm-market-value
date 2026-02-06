@@ -101,6 +101,8 @@ AUTH_DEV_MODE=false
 | `PUT` | `/api/config/years` | Yes | Set year range |
 | `GET` | `/api/config/test-years` | Yes | Get test years config |
 | `PUT` | `/api/config/test-years` | Yes | Set test years config |
+| `GET` | `/api/config/sale-history-years` | Yes | Get sale history years config |
+| `PUT` | `/api/config/sale-history-years` | Yes | Set sale history years config |
 | `GET` | `/api/config/{country}` | Yes | Get region config |
 | `POST` | `/api/config/{country}` | Yes | Partial update region config |
 | `PUT` | `/api/config/{country}` | Yes | Create/replace region config |
@@ -375,6 +377,42 @@ GET /api/sales/{sale_id}
       "clearance_rate_change": 10.0
     }
   },
+  "history": [
+    {
+      "year": 2024,
+      "sale_ids": [636],
+      "start_date": "2024-01-07",
+      "end_date": "2024-01-10",
+      "total_lots": 800,
+      "sold_count": 559,
+      "passed_in_count": 185,
+      "withdrawn_count": 56,
+      "clearance_rate": 69.9,
+      "gross": 58373500.0,
+      "avg_price": 104424.87,
+      "median_price": 75000.0,
+      "q1_price": 40000.0,
+      "q3_price": 135000.0,
+      "top10_avg": 650000.0
+    },
+    {
+      "year": 2023,
+      "sale_ids": [510],
+      "start_date": "2023-01-08",
+      "end_date": "2023-01-11",
+      "total_lots": 780,
+      "sold_count": 540,
+      "passed_in_count": 170,
+      "withdrawn_count": 70,
+      "clearance_rate": 72.5,
+      "gross": 52000000.0,
+      "avg_price": 96296.30,
+      "median_price": 70000.0,
+      "q1_price": 38000.0,
+      "q3_price": 125000.0,
+      "top10_avg": 580000.0
+    }
+  ],
   "queue_stats": {
     "completed": 723,
     "in_queue": 0,
@@ -472,6 +510,26 @@ Prior year is matched by: same company + same sale type + same month of the year
 | `sold_count_change` | integer\|null | Sold count difference (absolute) |
 | `clearance_rate_change` | float\|null | Clearance rate difference (percentage points) |
 
+**History Fields (configurable via `sale_history_years` in config):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `year` | integer | Sale year |
+| `sale_ids` | array | IDs of matching sales in that year |
+| `start_date` | string\|null | First sale start date (YYYY-MM-DD) |
+| `end_date` | string\|null | Last sale end date (YYYY-MM-DD) |
+| `total_lots` | integer | Total lots in sale |
+| `sold_count` | integer | Number of lots sold |
+| `passed_in_count` | integer | Number of lots passed in (unsold) |
+| `withdrawn_count` | integer | Number of lots withdrawn |
+| `clearance_rate` | float\|null | Clearance rate percentage |
+| `gross` | float\|null | Total gross revenue |
+| `avg_price` | float\|null | Average sale price |
+| `median_price` | float\|null | Median sale price (P50) |
+| `q1_price` | float\|null | 25th percentile price |
+| `q3_price` | float\|null | 75th percentile price |
+| `top10_avg` | float\|null | Average price of top 10 lots |
+
 **Queue Stats Fields (report generation status):**
 
 | Field | Type | Description |
@@ -494,6 +552,7 @@ Prior year is matched by: same company + same sale type + same month of the year
 - `price_stats` is `null` for upcoming sales with no sold lots
 - `prior_year` is `null` if no matching prior year sale found
 - `yoy_change` is `null` if either current or prior year has no price stats
+- `history` is empty if `sale_history_years` is 0 or no matching historical sales found
 - `clearance_rate` is calculated as: sold ÷ (total - withdrawn) × 100
 - Positive `yoy_change` values indicate increase vs prior year
 
@@ -1050,6 +1109,7 @@ GET /api/config
   "year_start": 2020,
   "year_end": null,
   "model_test_last_years": 2,
+  "sale_history_years": 5,
   "audit_user_id": 2,
   "regions": {
     "AUS": {
@@ -1161,6 +1221,46 @@ PUT /api/config/test-years?model_test_last_years={years}
 ```json
 {
   "model_test_last_years": 2
+}
+```
+
+---
+
+### Get Sale History Years
+
+Get number of years of history to include in sale detail.
+
+```
+GET /api/config/sale-history-years
+```
+
+**Response:**
+```json
+{
+  "sale_history_years": 5
+}
+```
+
+---
+
+### Set Sale History Years
+
+Set number of years of history to include in sale detail.
+
+```
+PUT /api/config/sale-history-years?sale_history_years={years}
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Range | Description |
+|-----------|------|-------|-------------|
+| `sale_history_years` | integer | 0-20 | Years of history (0 to disable) |
+
+**Response:**
+```json
+{
+  "sale_history_years": 5
 }
 ```
 

@@ -2,6 +2,7 @@
   "year_start": 2020,
   "year_end": null,
   "model_test_last_years": 2,
+  "sale_history_years": 5,
   "audit_user_id": 2,
   "regions": {
     "AUS": {

@@ -52,6 +52,7 @@ class AppConfig:
     year_start: int
     year_end: int | None
     model_test_last_years: int
+    sale_history_years: int
     audit_user_id: int
     regions: dict[str, RegionConfig]
 
@@ -157,6 +158,7 @@ class Config:
             year_start=data["year_start"],
             year_end=data.get("year_end"),
             model_test_last_years=data.get("model_test_last_years", 2),
+            sale_history_years=data.get("sale_history_years", 5),
             audit_user_id=data.get("audit_user_id", 2),
             regions=regions,
         )

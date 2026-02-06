@@ -42,7 +42,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"test@example.com\"\n}"
+							"raw": "{\n  \"email\": \"farid@g1goldmine.com\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/auth/request-otp",
@@ -77,7 +77,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"test@example.com\",\n  \"code\": \"123456\"\n}"
+							"raw": "{\n  \"email\": \"farid@g1goldmine.com\",\n  \"code\": \"123456\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/auth/verify-otp",
@@ -550,6 +550,46 @@
 								{
 									"key": "model_test_last_years",
 									"value": "2"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Sale History Years",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/sale-history-years",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "sale-history-years"]
+						}
+					}
+				},
+				{
+					"name": "Set Sale History Years",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/config/sale-history-years?sale_history_years=5",
+							"host": ["{{base_url}}"],
+							"path": ["api", "config", "sale-history-years"],
+							"query": [
+								{
+									"key": "sale_history_years",
+									"value": "5"
 								}
 							]
 						}

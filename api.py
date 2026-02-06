@@ -373,6 +373,24 @@ class PriorYearStats(BaseModel):
     yoy_change: Optional[YoyChange] = None
 
 
+class SaleHistoryYear(BaseModel):
+    year: int
+    sale_ids: list[int]
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    total_lots: int
+    sold_count: int
+    passed_in_count: int
+    withdrawn_count: int
+    clearance_rate: Optional[float] = None
+    gross: Optional[float] = None
+    avg_price: Optional[float] = None
+    median_price: Optional[float] = None
+    q1_price: Optional[float] = None
+    q3_price: Optional[float] = None
+    top10_avg: Optional[float] = None
+
+
 class SaleQueueStats(BaseModel):
     completed: int
     in_queue: int
@@ -401,6 +419,7 @@ class SaleDetailResponse(BaseModel):
     lot_stats: SaleLotStats
     price_stats: Optional[SalePriceStats] = None
     prior_year: Optional[PriorYearStats] = None
+    history: list[SaleHistoryYear] = []
     queue_stats: Optional[SaleQueueStats] = None
     books: list[SaleBook]
 
@@ -499,6 +518,10 @@ class TestYearsConfigResponse(BaseModel):
     model_test_last_years: int
 
 
+class SaleHistoryYearsConfigResponse(BaseModel):
+    sale_history_years: int
+
+
 # ============================================================================
 # AUTH REQUEST/RESPONSE MODELS
 # ============================================================================
@@ -552,6 +575,7 @@ class FullConfigResponse(BaseModel):
     year_start: int
     year_end: int | None
     model_test_last_years: int
+    sale_history_years: int
     audit_user_id: int
     regions: dict[str, RegionConfig]
 
@@ -926,6 +950,71 @@ async def get_sale_detail(
                 yoy_change=yoy_change,
             )
 
+    # Build history (configurable number of years)
+    history = []
+    history_years = config.app.sale_history_years
+    if history_years > 0 and sale_row.start_date and sale_row.sales_company_id and sale_row.sales_type_id:
+        current_year = sale_row.start_date.year
+        history_query = """
+            SELECT Id, YEAR(startDate) AS sale_year,
+                   CAST(startDate AS DATE) AS start_date,
+                   CAST(endDate AS DATE) AS end_date
+            FROM tblSales
+            WHERE salesCompanyId = ?
+              AND salesTypeId = ?
+              AND MONTH(startDate) = MONTH(?)
+              AND YEAR(startDate) >= ?
+              AND YEAR(startDate) < ?
+            ORDER BY startDate
+        """
+        cursor.execute(history_query, (
+            sale_row.sales_company_id,
+            sale_row.sales_type_id,
+            sale_row.start_date,
+            current_year - history_years,
+            current_year,
+        ))
+        history_sales = cursor.fetchall()
+
+        if history_sales:
+            # Group by year with dates
+            from collections import defaultdict
+            sales_by_year = defaultdict(lambda: {"ids": [], "start_dates": [], "end_dates": []})
+            for row in history_sales:
+                sales_by_year[row.sale_year]["ids"].append(row.Id)
+                if row.start_date:
+                    sales_by_year[row.sale_year]["start_dates"].append(row.start_date)
+                if row.end_date:
+                    sales_by_year[row.sale_year]["end_dates"].append(row.end_date)
+
+            # Compute stats for each year
+            for year in sorted(sales_by_year.keys(), reverse=True):
+                year_data = sales_by_year[year]
+                year_sale_ids = year_data["ids"]
+                year_start = min(year_data["start_dates"]) if year_data["start_dates"] else None
+                year_end = max(year_data["end_dates"]) if year_data["end_dates"] else None
+
+                year_price_stats, year_total, year_sold, year_passed_in, year_withdrawn, year_clearance = compute_price_stats(
+                    cursor, year_sale_ids
+                )
+                history.append(SaleHistoryYear(
+                    year=year,
+                    sale_ids=year_sale_ids,
+                    start_date=str(year_start) if year_start else None,
+                    end_date=str(year_end) if year_end else None,
+                    total_lots=year_total,
+                    sold_count=year_sold,
+                    passed_in_count=year_passed_in,
+                    withdrawn_count=year_withdrawn,
+                    clearance_rate=year_clearance,
+                    gross=year_price_stats.gross if year_price_stats else None,
+                    avg_price=year_price_stats.avg_price if year_price_stats else None,
+                    median_price=year_price_stats.median_price if year_price_stats else None,
+                    q1_price=year_price_stats.q1_price if year_price_stats else None,
+                    q3_price=year_price_stats.q3_price if year_price_stats else None,
+                    top10_avg=year_price_stats.top10_avg if year_price_stats else None,
+                ))
+
     conn.close()
 
     # Build response
@@ -973,6 +1062,7 @@ async def get_sale_detail(
         lot_stats=lot_stats,
         price_stats=price_stats,
         prior_year=prior_year,
+        history=history,
         queue_stats=queue_stats,
         books=books,
     )
@@ -1755,6 +1845,7 @@ async def get_full_config(
         year_start=config.app.year_start,
         year_end=config.app.year_end,
         model_test_last_years=config.app.model_test_last_years,
+        sale_history_years=config.app.sale_history_years,
         audit_user_id=config.app.audit_user_id,
         regions=regions,
     )
@@ -1810,6 +1901,27 @@ async def set_test_years_config(
     save_config_json(data)
 
     return TestYearsConfigResponse(model_test_last_years=model_test_last_years)
+
+
+@app.get("/api/config/sale-history-years", response_model=SaleHistoryYearsConfigResponse)
+async def get_sale_history_years_config(
+    _auth: None = Security(verify_auth),
+):
+    """Get sale_history_years - number of years of history to include in sale detail."""
+    return SaleHistoryYearsConfigResponse(sale_history_years=config.app.sale_history_years)
+
+
+@app.put("/api/config/sale-history-years", response_model=SaleHistoryYearsConfigResponse)
+async def set_sale_history_years_config(
+    sale_history_years: int = Query(..., ge=0, le=20, description="Number of years of history (0 to disable)"),
+    _auth: None = Security(verify_auth),
+):
+    """Set sale_history_years - number of years of history to include in sale detail."""
+    data = load_config_json()
+    data["sale_history_years"] = sale_history_years
+    save_config_json(data)
+
+    return SaleHistoryYearsConfigResponse(sale_history_years=sale_history_years)
 
 
 # Region endpoints - {country} parameter routes must come after specific routes

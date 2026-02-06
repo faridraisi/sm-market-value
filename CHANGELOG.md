@@ -5,7 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [2.12.0] - 2026-02-06
 
 ### Added
-- **Prior year dates** in sale detail endpoint - `start_date` and `end_date` fields in `prior_year` object
+- **Sale history** in sale detail endpoint - `history` array with yearly stats (sold_count, gross, avg_price, median_price, clearance_rate)
+- **Config: `sale_history_years`** - Number of years of history to include (default 5, set to 0 to disable)
+- **Config endpoints** `GET/PUT /api/config/sale-history-years` for runtime configuration
+- **Prior year dates** - `start_date` and `end_date` fields in `prior_year` object
 
 ## [2.11.0] - 2026-02-06
 

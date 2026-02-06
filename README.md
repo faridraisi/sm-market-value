@@ -55,6 +55,7 @@ API_KEY=your-secret-api-key
   "year_start": 2020,
   "year_end": null,
   "model_test_last_years": 2,
+  "sale_history_years": 5,
   "audit_user_id": 2,
   "regions": {
     "AUS": {
@@ -123,7 +124,7 @@ curl http://localhost:8000/health
 # Search by sale name or company name (typeahead)
 curl "http://localhost:8000/api/sales/search?q=Magic" -H "X-API-Key: $API_KEY"
 
-# Get sale details (lot stats, price stats, books)
+# Get sale details (lot stats, price stats, prior year, history, books)
 curl "http://localhost:8000/api/sales/2002" -H "X-API-Key: $API_KEY"
 ```
 
@@ -564,6 +565,7 @@ Check that `session_median_price` is set in your inference CSV. Future sales req
 
 | Version | Date | Changes |
 |---------|------|---------|
+| V2.12 | Feb 2026 | **Sale History**: Enhanced price stats (q1, q3, top10_avg, std_dev, price_bands), prior year comparison with YoY changes, configurable history years (`sale_history_years`). |
 | V2.11 | Feb 2026 | **Sales Endpoints**: `GET /api/sales/search` (typeahead) and `GET /api/sales/{sale_id}` (detailed info with lot stats, price stats, books). |
 | V2.10 | Feb 2026 | **EKS Deployment** to `data-feed` cluster. Production URL: `https://smmarketvalue.stallionmatch.horse`. Session median fallback to prior year for future sales. |
 | V2.9 | Feb 2026 | **Email OTP authentication** - JWT tokens via email login. Dual auth support (API key + JWT). |
