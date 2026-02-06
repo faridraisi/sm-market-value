@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.11.0] - 2026-02-06
+
+### Added
+- **Sale Search Endpoint** `GET /api/sales/search` for typeahead search in frontend:
+  - Search by sale name or company name
+  - Returns sale_id, sale_name, sale_date, country_code, lot_count, sale_company, status
+  - Status is "upcoming" for future sales, "past" for past sales
+  - Query param `q` (min 3 chars), optional `limit` (default 20, max 100)
+- **Sale Detail Endpoint** `GET /api/sales/{sale_id}` for detailed sale information:
+  - Basic info: sale_code, name, dates, type, status, company, country, currency
+  - Lot stats: total, sold, passed in, withdrawn, clearance rate
+  - Price stats (past sales): gross, avg, median, min, max
+  - Queue stats: report generation status (completed, in_queue, failed, postponed)
+  - Book/session breakdown with lot counts per day
+
 ## [2.10.0] - 2026-02-05
 
 ### Added

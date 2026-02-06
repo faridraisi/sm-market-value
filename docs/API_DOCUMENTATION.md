@@ -3,7 +3,7 @@
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
 **Base URL:** `http://localhost:8000` (development) or `https://smmarketvalue.stallionmatch.horse` (production)
-**API Version:** 2.10.0
+**API Version:** 2.11.0
 
 ---
 
@@ -86,6 +86,8 @@ AUTH_DEV_MODE=false
 | `GET` | `/health` | No | Health check |
 | `POST` | `/auth/request-otp` | No | Request OTP for email login |
 | `POST` | `/auth/verify-otp` | No | Verify OTP and get JWT token |
+| `GET` | `/api/sales/search` | Yes | Search sales by name or company |
+| `GET` | `/api/sales/{sale_id}` | Yes | Get detailed sale information |
 | `POST` | `/api/score/{sale_id}` | Yes | Score all lots for a sale |
 | `POST` | `/api/score/{sale_id}/compare` | Yes | Score and compare with existing DB values |
 | `POST` | `/api/score/{sale_id}/commit` | Yes | Commit selected lots to database |
@@ -209,6 +211,198 @@ GET /health
 |--------------|-------------|
 | `healthy` | All systems operational |
 | `degraded` | Database connection failed |
+
+---
+
+### Search Sales
+
+Search for sales by name or company name. Useful for typeahead/autocomplete in the frontend.
+
+```
+GET /api/sales/search
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `q` | string | Yes | - | Search query (min 3 characters) |
+| `limit` | integer | No | 20 | Max results to return (1-100) |
+
+**Response:**
+```json
+{
+  "query": "Magic",
+  "results": [
+    {
+      "sale_id": 2094,
+      "sale_name": "Gold Coast Yearling Sale",
+      "sale_date": "2026-01-13",
+      "country_code": "AUS",
+      "lot_count": 1221,
+      "sale_company": "Magic Millions",
+      "status": "past"
+    },
+    {
+      "sale_id": 2101,
+      "sale_name": "Gold Coast March Yearling Sale",
+      "sale_date": "2026-03-12",
+      "country_code": "AUS",
+      "lot_count": 490,
+      "sale_company": "Magic Millions",
+      "status": "upcoming"
+    }
+  ]
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `query` | string | The search query |
+| `results` | array | Array of matching sales |
+| `results[].sale_id` | integer | Sale identifier |
+| `results[].sale_name` | string | Full sale name |
+| `results[].sale_date` | string\|null | Sale start date (YYYY-MM-DD) |
+| `results[].country_code` | string | Country code (e.g., `AUS`, `NZL`) |
+| `results[].lot_count` | integer | Number of lots in the sale |
+| `results[].sale_company` | string | Sale company name |
+| `results[].status` | string | `"upcoming"` if sale_date >= today, otherwise `"past"` |
+
+**Notes:**
+- Searches both sale name and company name (OR logic)
+- Results are ordered by sale date descending (most recent first)
+- Minimum query length is 3 characters
+
+---
+
+### Get Sale Detail
+
+Get detailed information about a sale including lot statistics, price statistics, and book breakdown.
+
+```
+GET /api/sales/{sale_id}
+```
+
+**Path Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `sale_id` | integer | The sale ID |
+
+**Response:**
+```json
+{
+  "sale_id": 2002,
+  "sale_code": "MMGCYS26",
+  "sale_name": "Gold Coast Yearling Sale",
+  "start_date": "2026-01-13",
+  "end_date": "2026-01-19",
+  "sale_type": "Yearling",
+  "sale_status": "Verified",
+  "is_online": false,
+  "is_public": true,
+  "sale_company": "Magic Millions",
+  "company_website": "https://magicmillions.com.au",
+  "country_code": "AUS",
+  "country_name": "Australia",
+  "currency_code": "AUD",
+  "currency_symbol": "$",
+  "status": "past",
+  "lot_stats": {
+    "total_lots": 1221,
+    "sold_count": 932,
+    "passed_in_count": 143,
+    "withdrawn_count": 146,
+    "clearance_rate": 86.7
+  },
+  "price_stats": {
+    "gross": 212885000.00,
+    "avg_price": 228417.38,
+    "median_price": 150000.00,
+    "min_price": 4000.00,
+    "max_price": 2000000.00
+  },
+  "queue_stats": {
+    "completed": 1221,
+    "in_queue": 0,
+    "failed": 0,
+    "postponed": 0,
+    "last_completed": "2026-02-05 10:16:02.213333"
+  },
+  "books": [
+    {"book_number": 1, "day_number": 1, "lot_count": 210},
+    {"book_number": 1, "day_number": 2, "lot_count": 240},
+    {"book_number": 1, "day_number": 3, "lot_count": 240},
+    {"book_number": 1, "day_number": 4, "lot_count": 290},
+    {"book_number": 2, "day_number": 5, "lot_count": 241}
+  ]
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sale_id` | integer | Sale identifier |
+| `sale_code` | string\|null | Sale code (e.g., "MMGCYS26") |
+| `sale_name` | string | Full sale name |
+| `start_date` | string\|null | Sale start date (YYYY-MM-DD) |
+| `end_date` | string\|null | Sale end date (YYYY-MM-DD) |
+| `sale_type` | string\|null | Sale type (e.g., "Yearling", "Broodmare") |
+| `sale_status` | string\|null | Sale status (e.g., "Verified") |
+| `is_online` | boolean | Whether this is an online sale |
+| `is_public` | boolean | Whether the sale is public |
+| `sale_company` | string | Sale company name |
+| `company_website` | string\|null | Sale company website URL |
+| `country_code` | string | Country code (e.g., "AUS") |
+| `country_name` | string | Full country name |
+| `currency_code` | string\|null | Currency code (e.g., "AUD") |
+| `currency_symbol` | string\|null | Currency symbol (e.g., "$") |
+| `status` | string | `"upcoming"` if start_date >= today, otherwise `"past"` |
+
+**Lot Stats Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_lots` | integer | Total catalogue lots |
+| `sold_count` | integer | Number of lots sold |
+| `passed_in_count` | integer | Number of lots passed in |
+| `withdrawn_count` | integer | Number of lots withdrawn |
+| `clearance_rate` | float\|null | Clearance rate: sold / (total - withdrawn) × 100 |
+
+**Price Stats Fields (null for upcoming sales):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gross` | float\|null | Total gross revenue |
+| `avg_price` | float\|null | Average sale price |
+| `median_price` | float\|null | Median sale price |
+| `min_price` | float\|null | Lowest sale price |
+| `max_price` | float\|null | Highest sale price (top lot) |
+
+**Queue Stats Fields (report generation status):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `completed` | integer | Lot reports generated |
+| `in_queue` | integer | Lots waiting to process |
+| `failed` | integer | Failed to generate |
+| `postponed` | integer | Deferred processing |
+| `last_completed` | string\|null | Timestamp of last report generated |
+
+**Book Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `book_number` | integer | Book/catalogue number |
+| `day_number` | integer\|null | Day of sale |
+| `lot_count` | integer | Number of lots in this session |
+
+**Notes:**
+- `price_stats` is `null` for upcoming sales with no sold lots
+- `clearance_rate` is calculated as: sold ÷ (total - withdrawn) × 100
 
 ---
 

@@ -304,6 +304,74 @@ class HealthResponse(BaseModel):
     database_connected: bool
 
 
+class SaleSearchResult(BaseModel):
+    sale_id: int
+    sale_name: str
+    sale_date: Optional[str] = None
+    country_code: str
+    lot_count: int
+    sale_company: str
+    status: str  # "past" or "upcoming"
+
+
+class SaleSearchResponse(BaseModel):
+    query: str
+    results: list[SaleSearchResult]
+
+
+class SaleBook(BaseModel):
+    book_number: int
+    day_number: Optional[int] = None
+    lot_count: int
+
+
+class SaleLotStats(BaseModel):
+    total_lots: int
+    sold_count: int
+    passed_in_count: int
+    withdrawn_count: int
+    clearance_rate: Optional[float] = None  # sold / (total - withdrawn) * 100
+
+
+class SalePriceStats(BaseModel):
+    gross: Optional[float] = None
+    avg_price: Optional[float] = None
+    median_price: Optional[float] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+
+
+class SaleQueueStats(BaseModel):
+    completed: int
+    in_queue: int
+    failed: int
+    postponed: int
+    last_completed: Optional[str] = None
+
+
+class SaleDetailResponse(BaseModel):
+    sale_id: int
+    sale_code: Optional[str] = None
+    sale_name: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    sale_type: Optional[str] = None
+    sale_status: Optional[str] = None
+    is_online: bool
+    is_public: bool
+    sale_company: str
+    company_website: Optional[str] = None
+    country_code: str
+    country_name: str
+    currency_code: Optional[str] = None
+    currency_symbol: Optional[str] = None
+    status: str  # "past" or "upcoming"
+    lot_stats: SaleLotStats
+    price_stats: Optional[SalePriceStats] = None
+    queue_stats: Optional[SaleQueueStats] = None
+    books: list[SaleBook]
+
+
 class TrainResponse(BaseModel):
     message: str
     country: str
@@ -522,6 +590,225 @@ async def health_check():
     except Exception:
         pass
     return HealthResponse(status="healthy" if db_ok else "degraded", database_connected=db_ok)
+
+
+@app.get("/api/sales/search", response_model=SaleSearchResponse)
+async def search_sales(
+    q: str = Query(..., min_length=3, description="Search query"),
+    limit: int = Query(default=20, ge=1, le=100),
+    _auth: None = Security(verify_auth),
+):
+    """Search sales by name. Returns matching sales with lot counts."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    query = """
+        SELECT TOP (?)
+            SL.Id AS sale_id,
+            SL.salesName AS sale_name,
+            CAST(SL.startDate AS DATE) AS sale_date,
+            CN.countryCode AS country_code,
+            SC.salescompanyName AS sale_company,
+            (SELECT COUNT(*) FROM tblSalesLot LT
+             WHERE LT.salesId = SL.Id) AS lot_count
+        FROM tblSales SL
+        JOIN tblCountry CN ON SL.countryId = CN.id
+        JOIN tblSalesCompany SC ON SL.salesCompanyId = SC.Id
+        WHERE SL.salesName LIKE ? OR SC.salescompanyName LIKE ?
+        ORDER BY SL.startDate DESC
+    """
+
+    cursor.execute(query, (limit, f"%{q}%", f"%{q}%"))
+    rows = cursor.fetchall()
+    conn.close()
+
+    today = datetime.now().date()
+    results = [
+        SaleSearchResult(
+            sale_id=row.sale_id,
+            sale_name=row.sale_name,
+            sale_date=str(row.sale_date) if row.sale_date else None,
+            country_code=row.country_code,
+            lot_count=row.lot_count,
+            sale_company=row.sale_company,
+            status="upcoming" if row.sale_date and row.sale_date >= today else "past"
+        )
+        for row in rows
+    ]
+
+    return SaleSearchResponse(query=q, results=results)
+
+
+@app.get("/api/sales/{sale_id}", response_model=SaleDetailResponse)
+async def get_sale_detail(
+    sale_id: int,
+    _auth: None = Security(verify_auth),
+):
+    """Get detailed information about a sale."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Get basic sale info
+    query = """
+        SELECT
+            SL.Id AS sale_id,
+            SL.salesCode AS sale_code,
+            SL.salesName AS sale_name,
+            CAST(SL.startDate AS DATE) AS start_date,
+            CAST(SL.endDate AS DATE) AS end_date,
+            SL.isOnlineSales AS is_online,
+            SL.isPublic AS is_public,
+            SC.salescompanyName AS sale_company,
+            SC.salescompanyWebsite AS company_website,
+            CN.countryCode AS country_code,
+            CN.countryName AS country_name,
+            CUR.currencyCode AS currency_code,
+            CUR.currencySymbol AS currency_symbol,
+            ST.status AS sale_status,
+            STP.salesTypeName AS sale_type
+        FROM tblSales SL
+        JOIN tblCountry CN ON SL.countryId = CN.id
+        JOIN tblSalesCompany SC ON SL.salesCompanyId = SC.Id
+        LEFT JOIN tblCurrency CUR ON CN.preferredCurrencyId = CUR.id
+        LEFT JOIN tblSalesStatus ST ON SL.statusId = ST.id
+        LEFT JOIN tblSalesType STP ON SL.salesTypeId = STP.Id
+        WHERE SL.Id = ?
+    """
+    cursor.execute(query, (sale_id,))
+    sale_row = cursor.fetchone()
+
+    if not sale_row:
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Sale {sale_id} not found")
+
+    # Get lot statistics
+    stats_query = """
+        SELECT
+            COUNT(*) AS total_lots,
+            SUM(CASE WHEN isWithdrawn = 1 THEN 1 ELSE 0 END) AS withdrawn_count,
+            SUM(CASE WHEN ISNULL(isWithdrawn, 0) = 0 AND isPassedIn = 1 THEN 1 ELSE 0 END) AS passed_in_count,
+            SUM(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN 1 ELSE 0 END) AS sold_count,
+            SUM(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price ELSE 0 END) AS gross,
+            AVG(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price END) AS avg_price,
+            MIN(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price END) AS min_price,
+            MAX(CASE WHEN price > 0 AND ISNULL(isWithdrawn, 0) = 0 AND ISNULL(isPassedIn, 0) = 0 THEN price END) AS max_price
+        FROM tblSalesLot
+        WHERE salesId = ?
+    """
+    cursor.execute(stats_query, (sale_id,))
+    stats_row = cursor.fetchone()
+
+    # Get median price (separate query for PERCENTILE_CONT)
+    median_query = """
+        SELECT DISTINCT
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) OVER () AS median_price
+        FROM tblSalesLot
+        WHERE salesId = ?
+          AND price > 0
+          AND ISNULL(isWithdrawn, 0) = 0
+          AND ISNULL(isPassedIn, 0) = 0
+    """
+    cursor.execute(median_query, (sale_id,))
+    median_row = cursor.fetchone()
+    median_price = median_row.median_price if median_row else None
+
+    # Get book breakdown
+    books_query = """
+        SELECT bookNumber, dayNumber, COUNT(*) AS lot_count
+        FROM tblSalesLot
+        WHERE salesId = ?
+        GROUP BY bookNumber, dayNumber
+        ORDER BY bookNumber, dayNumber
+    """
+    cursor.execute(books_query, (sale_id,))
+    books_rows = cursor.fetchall()
+
+    # Get queue stats (report generation status)
+    queue_query = """
+        SELECT Completed, InQueue, Failed, Postponed, LastCompleted
+        FROM vw_fr_SalesQueueOverview
+        WHERE SaleId = ?
+    """
+    cursor.execute(queue_query, (sale_id,))
+    queue_row = cursor.fetchone()
+    conn.close()
+
+    # Build response
+    today = datetime.now().date()
+    start_date = sale_row.start_date
+
+    # Lot stats
+    total_lots = stats_row.total_lots or 0
+    withdrawn = stats_row.withdrawn_count or 0
+    passed_in = stats_row.passed_in_count or 0
+    sold = stats_row.sold_count or 0
+
+    # Clearance rate: sold / (total - withdrawn)
+    eligible_lots = total_lots - withdrawn
+    clearance_rate = round(100.0 * sold / eligible_lots, 1) if eligible_lots > 0 else None
+
+    lot_stats = SaleLotStats(
+        total_lots=total_lots,
+        sold_count=sold,
+        passed_in_count=passed_in,
+        withdrawn_count=withdrawn,
+        clearance_rate=clearance_rate,
+    )
+
+    # Price stats (only if there are sold lots)
+    price_stats = None
+    if sold > 0:
+        price_stats = SalePriceStats(
+            gross=round(stats_row.gross, 2) if stats_row.gross else None,
+            avg_price=round(stats_row.avg_price, 2) if stats_row.avg_price else None,
+            median_price=round(median_price, 2) if median_price else None,
+            min_price=round(stats_row.min_price, 2) if stats_row.min_price else None,
+            max_price=round(stats_row.max_price, 2) if stats_row.max_price else None,
+        )
+
+    # Books
+    books = [
+        SaleBook(
+            book_number=row.bookNumber or 1,
+            day_number=row.dayNumber,
+            lot_count=row.lot_count,
+        )
+        for row in books_rows
+    ]
+
+    # Queue stats
+    queue_stats = None
+    if queue_row:
+        queue_stats = SaleQueueStats(
+            completed=queue_row.Completed or 0,
+            in_queue=queue_row.InQueue or 0,
+            failed=queue_row.Failed or 0,
+            postponed=queue_row.Postponed or 0,
+            last_completed=str(queue_row.LastCompleted) if queue_row.LastCompleted else None,
+        )
+
+    return SaleDetailResponse(
+        sale_id=sale_row.sale_id,
+        sale_code=sale_row.sale_code,
+        sale_name=sale_row.sale_name,
+        start_date=str(sale_row.start_date) if sale_row.start_date else None,
+        end_date=str(sale_row.end_date) if sale_row.end_date else None,
+        sale_type=sale_row.sale_type,
+        sale_status=sale_row.sale_status,
+        is_online=bool(sale_row.is_online),
+        is_public=bool(sale_row.is_public),
+        sale_company=sale_row.sale_company,
+        company_website=sale_row.company_website,
+        country_code=sale_row.country_code,
+        country_name=sale_row.country_name,
+        currency_code=sale_row.currency_code,
+        currency_symbol=sale_row.currency_symbol,
+        status="upcoming" if start_date and start_date >= today else "past",
+        lot_stats=lot_stats,
+        price_stats=price_stats,
+        queue_stats=queue_stats,
+        books=books,
+    )
 
 
 @app.post("/api/score/{sale_id}", response_model=ScoreResponse)

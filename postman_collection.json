@@ -106,6 +106,55 @@
 			]
 		},
 		{
+			"name": "Sales",
+			"item": [
+				{
+					"name": "Search Sales",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/sales/search?q=Magic&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "sales", "search"],
+							"query": [
+								{
+									"key": "q",
+									"value": "Magic"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Sale Detail",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/sales/2002",
+							"host": ["{{base_url}}"],
+							"path": ["api", "sales", "2002"]
+						}
+					}
+				}
+			]
+		},
+		{
 			"name": "Health & Scoring",
 			"item": [
 				{

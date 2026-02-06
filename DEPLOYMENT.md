@@ -26,6 +26,14 @@ source .venv/bin/activate
 # Start the API server
 uvicorn api:app --host 0.0.0.0 --port 8000
 
+# Search sales by name or company (typeahead)
+curl "http://localhost:8000/api/sales/search?q=Magic" \
+  -H "X-API-Key: your-api-key"
+
+# Get sale details
+curl "http://localhost:8000/api/sales/2002" \
+  -H "X-API-Key: your-api-key"
+
 # Score a sale (JSON response)
 curl -X POST "http://localhost:8000/api/score/2094" \
   -H "X-API-Key: your-api-key"

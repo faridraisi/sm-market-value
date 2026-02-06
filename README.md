@@ -118,6 +118,15 @@ curl http://localhost:8000/health
 
 #### Additional API Endpoints
 
+**Search Sales:**
+```bash
+# Search by sale name or company name (typeahead)
+curl "http://localhost:8000/api/sales/search?q=Magic" -H "X-API-Key: $API_KEY"
+
+# Get sale details (lot stats, price stats, books)
+curl "http://localhost:8000/api/sales/2002" -H "X-API-Key: $API_KEY"
+```
+
 **Training:**
 ```bash
 # Train new model (runs in background)
@@ -555,6 +564,7 @@ Check that `session_median_price` is set in your inference CSV. Future sales req
 
 | Version | Date | Changes |
 |---------|------|---------|
+| V2.11 | Feb 2026 | **Sales Endpoints**: `GET /api/sales/search` (typeahead) and `GET /api/sales/{sale_id}` (detailed info with lot stats, price stats, books). |
 | V2.10 | Feb 2026 | **EKS Deployment** to `data-feed` cluster. Production URL: `https://smmarketvalue.stallionmatch.horse`. Session median fallback to prior year for future sales. |
 | V2.9 | Feb 2026 | **Email OTP authentication** - JWT tokens via email login. Dual auth support (API key + JWT). |
 | V2.8 | Feb 2026 | **Model upload/download/delete endpoints** for CI/CD and backup workflows. |
