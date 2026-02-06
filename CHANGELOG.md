@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.12.0] - 2026-02-06
+
+### Added
+- **Prior year dates** in sale detail endpoint - `start_date` and `end_date` fields in `prior_year` object
+
 ## [2.11.0] - 2026-02-06
 
 ### Added

@@ -3,7 +3,7 @@
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
 **Base URL:** `http://localhost:8000` (development) or `https://smmarketvalue.stallionmatch.horse` (production)
-**API Version:** 2.11.0
+**API Version:** 2.12.0
 
 ---
 
@@ -339,6 +339,8 @@ GET /api/sales/{sale_id}
   "prior_year": {
     "sale_ids": [636],
     "sale_names": ["Premier Yearling Sale"],
+    "start_date": "2024-03-03",
+    "end_date": "2024-03-05",
     "lot_stats": {
       "total_lots": 800,
       "sold_count": 559,
@@ -454,6 +456,8 @@ Prior year is matched by: same company + same sale type + same month of the year
 |-------|------|-------------|
 | `sale_ids` | array | IDs of matching prior year sales |
 | `sale_names` | array | Names of matching prior year sales |
+| `start_date` | string\|null | Earliest start date (if multiple sales) |
+| `end_date` | string\|null | Latest end date (if multiple sales) |
 | `lot_stats` | object | Aggregated lot statistics |
 | `price_stats` | object\|null | Aggregated price statistics |
 | `yoy_change` | object\|null | Year-over-year changes |

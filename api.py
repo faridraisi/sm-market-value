@@ -366,6 +366,8 @@ class YoyChange(BaseModel):
 class PriorYearStats(BaseModel):
     sale_ids: list[int]  # Could be multiple matching sales
     sale_names: list[str]
+    start_date: Optional[str] = None  # Earliest start date
+    end_date: Optional[str] = None  # Latest end date
     lot_stats: SaleLotStats
     price_stats: Optional[SalePriceStats] = None
     yoy_change: Optional[YoyChange] = None
@@ -849,12 +851,13 @@ async def get_sale_detail(
     prior_year = None
     if sale_row.start_date and sale_row.sales_company_id and sale_row.sales_type_id:
         prior_year_query = """
-            SELECT Id, salesName
+            SELECT Id, salesName, CAST(startDate AS DATE) AS start_date, CAST(endDate AS DATE) AS end_date
             FROM tblSales
             WHERE salesCompanyId = ?
               AND salesTypeId = ?
               AND MONTH(startDate) = MONTH(?)
               AND YEAR(startDate) = YEAR(?) - 1
+            ORDER BY startDate
         """
         cursor.execute(prior_year_query, (
             sale_row.sales_company_id,
@@ -867,6 +870,9 @@ async def get_sale_detail(
         if prior_sales:
             prior_sale_ids = [row.Id for row in prior_sales]
             prior_sale_names = [row.salesName for row in prior_sales]
+            # Get earliest start and latest end across all matching sales
+            prior_start_date = min((row.start_date for row in prior_sales if row.start_date), default=None)
+            prior_end_date = max((row.end_date for row in prior_sales if row.end_date), default=None)
 
             # Compute stats for prior year sales
             prior_price_stats, prior_total, prior_sold, prior_passed_in, prior_withdrawn, prior_clearance = compute_price_stats(
@@ -913,6 +919,8 @@ async def get_sale_detail(
             prior_year = PriorYearStats(
                 sale_ids=prior_sale_ids,
                 sale_names=prior_sale_names,
+                start_date=str(prior_start_date) if prior_start_date else None,
+                end_date=str(prior_end_date) if prior_end_date else None,
                 lot_stats=prior_lot_stats,
                 price_stats=prior_price_stats,
                 yoy_change=yoy_change,
