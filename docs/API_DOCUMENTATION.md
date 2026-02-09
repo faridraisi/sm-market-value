@@ -3,7 +3,7 @@
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
 **Base URL:** `http://localhost:8000` (development) or `https://smmarketvalue.stallionmatch.horse` (production)
-**API Version:** 2.12.0
+**API Version:** 2.13.0
 
 ---
 
@@ -92,6 +92,7 @@ AUTH_DEV_MODE=false
 | `POST` | `/api/score/{sale_id}/compare` | Yes | Score and compare with existing DB values |
 | `POST` | `/api/score/{sale_id}/commit` | Yes | Commit selected lots to database |
 | `POST` | `/api/train/{country}` | Yes | Train new model (background) |
+| `GET` | `/api/train/status` | Yes | Get training job status |
 | `GET` | `/api/models/{country}` | Yes | List all models for country |
 | `GET` | `/api/models/{model_name}/download` | Yes | Download model as ZIP |
 | `POST` | `/api/models/{model_name}` | Yes | Upload new model from ZIP |
@@ -902,12 +903,84 @@ POST /api/train/{country}
 **Response:**
 ```json
 {
-  "message": "Training started for AUS. Check GET /api/models/aus for completion.",
+  "message": "Training started for AUS. Check GET /api/train/status for progress.",
   "country": "AUS",
   "version": "v5",
   "output_dir": "models/aus_v5"
 }
 ```
+
+**Errors:**
+
+| Status | Cause |
+|--------|-------|
+| `400` | Invalid country code |
+| `409` | Training already in progress |
+
+---
+
+### Get Training Status
+
+Get the current or most recent training job status.
+
+```
+GET /api/train/status
+```
+
+**Response (idle):**
+```json
+{
+  "active": false,
+  "country": null,
+  "version": null,
+  "phase": null,
+  "started_at": null,
+  "completed_at": null,
+  "status": "idle",
+  "error": null
+}
+```
+
+**Response (in progress):**
+```json
+{
+  "active": true,
+  "country": "AUS",
+  "version": "v5",
+  "phase": "training_models",
+  "started_at": "2026-02-10T03:15:00+00:00",
+  "completed_at": null,
+  "status": "training",
+  "error": null
+}
+```
+
+**Response (completed):**
+```json
+{
+  "active": false,
+  "country": "AUS",
+  "version": "v5",
+  "phase": "done",
+  "started_at": "2026-02-10T03:15:00+00:00",
+  "completed_at": "2026-02-10T03:25:00+00:00",
+  "status": "completed",
+  "error": null
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `active` | boolean | Whether training is currently running |
+| `country` | string\|null | Country being trained |
+| `version` | string\|null | Model version being trained |
+| `phase` | string\|null | Current phase: `starting`, `exporting_data`, `preparing_features`, `splitting_data`, `training_models`, `evaluating`, `saving_artifacts`, `done` |
+| `started_at` | string\|null | ISO 8601 timestamp when training started |
+| `completed_at` | string\|null | ISO 8601 timestamp when training finished |
+| `status` | string | Status: `idle`, `training`, `completed`, `failed` |
+| `error` | string\|null | Error message if status is `failed` |
 
 ---
 
@@ -1613,6 +1686,7 @@ interface FullConfigResponse {
 | `400` | Bad request (invalid parameters) |
 | `403` | Authentication failed (invalid API key) |
 | `404` | Resource not found (sale, model, etc.) |
+| `409` | Conflict (training already in progress, model already exists) |
 | `500` | Internal server error |
 
 ### Common Errors

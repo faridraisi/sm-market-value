@@ -855,7 +855,7 @@ def split_data_time_based(
 # ============================================================================
 
 
-def train_model(country: str, version: str = None, csv_path: str = None):
+def train_model(country: str, version: str = None, csv_path: str = None, on_progress=None):
     """
     Main training function.
 
@@ -863,7 +863,12 @@ def train_model(country: str, version: str = None, csv_path: str = None):
         country: Country code (aus, nzl, usa)
         version: Optional version override (default: auto-increment)
         csv_path: Optional CSV path (default: export from database)
+        on_progress: Optional callback function(phase: str) called at each major step
     """
+    def _progress(phase):
+        if on_progress:
+            on_progress(phase)
+
     print("=" * 60)
     print(f"MARKET VALUE MODEL — TRAINING ({country.upper()})")
     print("=" * 60)
@@ -874,18 +879,21 @@ def train_model(country: str, version: str = None, csv_path: str = None):
     print(f"\nModel version: {version}")
 
     # Load or export training data
+    _progress("exporting_data")
     if csv_path:
         df = load_training_data(csv_path)
     else:
         df = export_training_data(country)
 
     # Prepare features
+    _progress("preparing_features")
     print("\nPreparing features...")
     X, y, feature_cols, df_processed = prepare_features(df)
     print(f"  Features: {len(feature_cols)}")
     print(f"  Samples: {len(X)}")
 
     # Split data (time-based if sale_year exists, otherwise random)
+    _progress("splitting_data")
     print("\nSplitting data...")
     X_train, X_val, X_test, y_train, y_val, y_test, df_test, split_type = split_data_time_based(
         X, y, df_processed
@@ -897,6 +905,7 @@ def train_model(country: str, version: str = None, csv_path: str = None):
     print(f"  Test: {len(X_test)}")
 
     # Train baseline model for sanity check
+    _progress("training_models")
     baseline_metrics = train_baseline(X_train, y_train, X_test, y_test)
 
     # Train quantile models
@@ -908,6 +917,7 @@ def train_model(country: str, version: str = None, csv_path: str = None):
     pred_q75 = models["q75"].predict(X_test)
 
     # Evaluate models
+    _progress("evaluating")
     eval_metrics = evaluate_models(y_test, pred_q25, pred_q50, pred_q75, df_test)
 
     # Calibrate
@@ -920,6 +930,7 @@ def train_model(country: str, version: str = None, csv_path: str = None):
     output_dir = f"models/{country}_{version}"
 
     # Save all artifacts
+    _progress("saving_artifacts")
     save_models(
         models, offsets, feature_cols, feature_importance, output_dir, version, country
     )

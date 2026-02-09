@@ -1385,9 +1385,61 @@ async def score_and_compare(
 # ============================================================================
 
 
+training_state: dict = {
+    "active": False,
+    "country": None,
+    "version": None,
+    "phase": None,
+    "started_at": None,
+    "completed_at": None,
+    "status": "idle",  # idle | training | completed | failed
+    "error": None,
+}
+
+
+class TrainingStatusResponse(BaseModel):
+    active: bool
+    country: Optional[str] = None
+    version: Optional[str] = None
+    phase: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    status: str
+    error: Optional[str] = None
+
+
 def run_training(country: str, version: str):
     """Background task to run model training."""
-    train_model(country=country, version=version)
+    training_state["active"] = True
+    training_state["country"] = country.upper()
+    training_state["version"] = version
+    training_state["phase"] = "starting"
+    training_state["started_at"] = datetime.now(timezone.utc).isoformat()
+    training_state["completed_at"] = None
+    training_state["status"] = "training"
+    training_state["error"] = None
+
+    def on_progress(phase: str):
+        training_state["phase"] = phase
+
+    try:
+        train_model(country=country, version=version, on_progress=on_progress)
+        training_state["status"] = "completed"
+        training_state["phase"] = "done"
+    except Exception as e:
+        training_state["status"] = "failed"
+        training_state["error"] = str(e)
+    finally:
+        training_state["active"] = False
+        training_state["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+
+@app.get("/api/train/status", response_model=TrainingStatusResponse)
+async def get_training_status(
+    _auth: None = Security(verify_auth),
+):
+    """Get current training job status."""
+    return TrainingStatusResponse(**training_state)
 
 
 @app.post("/api/train/{country}", response_model=TrainResponse)
@@ -1400,11 +1452,17 @@ async def train_model_endpoint(
     """
     Train a new model for a specific country.
 
-    Training runs in the background. Check models list endpoint for completion.
+    Training runs in the background. Check GET /api/train/status for progress.
     """
     country = country.lower()
     if country not in ["aus", "nzl", "usa"]:
         raise HTTPException(status_code=400, detail=f"Invalid country: {country}. Must be aus, nzl, or usa.")
+
+    if training_state["active"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Training already in progress for {training_state['country']} ({training_state['phase']}). Check GET /api/train/status.",
+        )
 
     # Determine version
     if version is None:
@@ -1417,7 +1475,7 @@ async def train_model_endpoint(
     background_tasks.add_task(run_training, country, version)
 
     return TrainResponse(
-        message=f"Training started for {country.upper()}. Check GET /api/models/{country} for completion.",
+        message=f"Training started for {country.upper()}. Check GET /api/train/status for progress.",
         country=country.upper(),
         version=version,
         output_dir=output_dir,

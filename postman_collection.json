@@ -310,6 +310,23 @@
 			"name": "Training",
 			"item": [
 				{
+					"name": "Get Training Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/train/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "train", "status"]
+						}
+					}
+				},
+				{
 					"name": "Train Model (auto version)",
 					"request": {
 						"method": "POST",

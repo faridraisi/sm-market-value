@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.13.0] - 2026-02-10
+
+### Added
+- **Training status endpoint** `GET /api/train/status` - Monitor training progress with phase tracking (`exporting_data`, `preparing_features`, `splitting_data`, `training_models`, `evaluating`, `saving_artifacts`)
+- **Concurrency lock** - `POST /api/train/{country}` now returns `409 Conflict` if training is already in progress
+- **Training state tracking** - In-memory state with status (`idle`, `training`, `completed`, `failed`), timestamps, and error messages
+
 ## [2.12.0] - 2026-02-06
 
 ### Added
