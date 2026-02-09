@@ -3,7 +3,7 @@
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
 **Base URL:** `http://localhost:8000` (development) or `https://smmarketvalue.stallionmatch.horse` (production)
-**API Version:** 2.13.0
+**API Version:** 2.14.0
 
 ---
 
@@ -15,9 +15,10 @@ API documentation for the Market Value scoring system. This document covers all 
 4. [Scoring Endpoints](#scoring-endpoints)
 5. [Model Management](#model-management)
 6. [Configuration Endpoints](#configuration-endpoints)
-7. [Response Types](#response-types)
-8. [Error Handling](#error-handling)
-9. [Integration Examples](#integration-examples)
+7. [Activity Log](#activity-log)
+8. [Response Types](#response-types)
+9. [Error Handling](#error-handling)
+10. [Integration Examples](#integration-examples)
 
 ---
 
@@ -68,6 +69,10 @@ JWT_EXPIRY_HOURS=24
 
 # Dev mode (skip email, log OTP to console)
 AUTH_DEV_MODE=false
+
+# Activity log rotation (optional)
+ACTIVITY_LOG_MAX_MB=20
+ACTIVITY_LOG_MAX_DAYS=26
 ```
 
 ### Authentication Errors
@@ -108,6 +113,7 @@ AUTH_DEV_MODE=false
 | `POST` | `/api/config/{country}` | Yes | Partial update region config |
 | `PUT` | `/api/config/{country}` | Yes | Create/replace region config |
 | `DELETE` | `/api/config/{country}` | Yes | Remove region |
+| `GET` | `/api/activity` | Yes | Get recent activity log |
 
 ---
 
@@ -903,7 +909,7 @@ POST /api/train/{country}
 **Response:**
 ```json
 {
-  "message": "Training started for AUS. Check GET /api/train/status for progress.",
+  "message": "Training started for AUS",
   "country": "AUS",
   "version": "v5",
   "output_dir": "models/aus_v5"
@@ -1476,6 +1482,77 @@ DELETE /api/config/{country}
 
 ---
 
+## Activity Log
+
+All mutating API actions (POST/PUT/DELETE) are logged to a file-based activity log. Each entry records the authenticated user, action, and a human-readable detail message.
+
+The log file is stored at `logs/activity.jsonl` and rotates automatically when it exceeds 20 MB or 26 days (configurable via `ACTIVITY_LOG_MAX_MB` and `ACTIVITY_LOG_MAX_DAYS` environment variables).
+
+### Get Activity Log
+
+Get recent activity log entries.
+
+```
+GET /api/activity
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Range | Description |
+|-----------|------|---------|-------|-------------|
+| `limit` | integer | 50 | 1-500 | Number of recent entries to return |
+
+**Response:**
+```json
+{
+  "entries": [
+    {
+      "timestamp": "2026-02-10T04:12:33+00:00",
+      "user": "farid@g1goldmine.com",
+      "action": "POST /api/score/2094/commit",
+      "detail": "Committed 156 lots (inserted=12, updated=144)"
+    },
+    {
+      "timestamp": "2026-02-10T04:10:15+00:00",
+      "user": "api_key",
+      "action": "POST /api/train/aus",
+      "detail": "Started training AUS v5"
+    }
+  ],
+  "total_in_file": 42
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `entries` | array | Recent activity log entries (newest last) |
+| `entries[].timestamp` | string | ISO 8601 timestamp (UTC) |
+| `entries[].user` | string | User identity: email for JWT auth, `"api_key"` for API key auth |
+| `entries[].action` | string | HTTP method and path (e.g., `"POST /api/score/2094"`) |
+| `entries[].detail` | string | Human-readable description of the action |
+| `total_in_file` | integer | Total number of entries in the current log file |
+
+**Logged Actions:**
+
+| Endpoint | Example Detail |
+|----------|---------------|
+| `POST /api/score/{sale_id}` | `"Scored 806 lots for sale 2094 (output=none)"` |
+| `POST /api/score/{sale_id}/commit` | `"Committed 156 lots (inserted=12, updated=144)"` |
+| `POST /api/score/{sale_id}/compare` | `"Compared 490 lots for sale 2101"` |
+| `POST /api/train/{country}` | `"Started training AUS v5"` |
+| `POST /api/models/{model_name}` | `"Uploaded model aus_v9"` |
+| `DELETE /api/models/{model_name}` | `"Deleted model aus_v9"` |
+| `POST /api/config/{country}` | `"Updated config for AUS"` |
+| `PUT /api/config/{country}` | `"Created region GBR"` |
+| `DELETE /api/config/{country}` | `"Deleted region GBR"` |
+| `PUT /api/config/years` | `"Set years 2020-2026"` |
+| `PUT /api/config/test-years` | `"Set test years to 2"` |
+| `PUT /api/config/sale-history-years` | `"Set sale history years to 5"` |
+
+---
+
 ## Response Types
 
 ### Price Range
@@ -1965,6 +2042,18 @@ curl -X PUT "http://localhost:8000/api/config/GBR" \
 
 # Remove region
 curl -X DELETE "http://localhost:8000/api/config/GBR" \
+  -H "X-API-Key: $API_KEY"
+
+# ==========================================
+# Activity Log
+# ==========================================
+
+# Get recent activity (default 50 entries)
+curl "http://localhost:8000/api/activity" \
+  -H "X-API-Key: $API_KEY"
+
+# Get last 10 entries
+curl "http://localhost:8000/api/activity?limit=10" \
   -H "X-API-Key: $API_KEY"
 ```
 

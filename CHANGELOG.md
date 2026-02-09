@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.14.0] - 2026-02-10
+
+### Added
+- **Activity log** - File-based audit trail for all mutating endpoints (POST/PUT/DELETE)
+  - Logs user identity (email for JWT, `"api_key"` for API key auth), action, and detail message
+  - JSONL format at `logs/activity.jsonl` with automatic rotation (20 MB or 26 days)
+  - `GET /api/activity` endpoint to retrieve recent entries (default 50, max 500)
+  - Configurable via `ACTIVITY_LOG_MAX_MB` and `ACTIVITY_LOG_MAX_DAYS` env vars
+- **User identity tracking** - `verify_auth()` now returns the authenticated user identity
+
 ## [2.13.0] - 2026-02-10
 
 ### Added

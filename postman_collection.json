@@ -722,6 +722,34 @@
 					}
 				}
 			]
+		},
+		{
+			"name": "Activity",
+			"item": [
+				{
+					"name": "Get Activity Log",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/activity?limit=50",
+							"host": ["{{base_url}}"],
+							"path": ["api", "activity"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					}
+				}
+			]
 		}
 	]
 }

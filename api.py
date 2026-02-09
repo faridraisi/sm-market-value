@@ -12,6 +12,7 @@ import re
 import shutil
 import time
 import zipfile
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -130,20 +131,60 @@ def verify_jwt_token(token: str) -> str | None:
 async def verify_auth(
     api_key: str = Security(api_key_header),
     authorization: str = Header(None)
-):
-    """Verify authentication via API key or JWT token."""
+) -> str:
+    """Verify authentication via API key or JWT token. Returns user identity."""
     # Check API key first
     if api_key and api_key == os.getenv("API_KEY"):
-        return
+        return "api_key"
 
     # Check JWT token
     if authorization and authorization.startswith("Bearer "):
         token = authorization[7:]
         email = verify_jwt_token(token)
         if email:
-            return
+            return email
 
     raise HTTPException(status_code=403, detail="Invalid authentication")
+
+
+# ============================================================================
+# ACTIVITY LOG
+# ============================================================================
+
+ACTIVITY_LOG_PATH = Path("logs/activity.jsonl")
+ACTIVITY_LOG_MAX_BYTES = int(os.getenv("ACTIVITY_LOG_MAX_MB", "20")) * 1024 * 1024
+ACTIVITY_LOG_MAX_DAYS = int(os.getenv("ACTIVITY_LOG_MAX_DAYS", "26"))
+
+
+def _rotate_if_needed():
+    """Rotate activity log if size or age limit exceeded."""
+    if not ACTIVITY_LOG_PATH.exists():
+        return
+    try:
+        stat = ACTIVITY_LOG_PATH.stat()
+        age_days = (time.time() - stat.st_mtime) / 86400
+        if stat.st_size >= ACTIVITY_LOG_MAX_BYTES or age_days >= ACTIVITY_LOG_MAX_DAYS:
+            ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+            ACTIVITY_LOG_PATH.rename(ACTIVITY_LOG_PATH.with_name(f"activity.{ts}.jsonl"))
+    except OSError:
+        pass
+
+
+def log_activity(user: str, method: str, path: str, detail: str):
+    """Append a JSON line to the activity log."""
+    ACTIVITY_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _rotate_if_needed()
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "user": user,
+        "action": f"{method} {path}",
+        "detail": detail,
+    }
+    try:
+        with open(ACTIVITY_LOG_PATH, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except OSError:
+        pass
 
 
 # ============================================================================
@@ -582,6 +623,23 @@ class FullConfigResponse(BaseModel):
 
 
 # ============================================================================
+# ACTIVITY LOG MODELS
+# ============================================================================
+
+
+class ActivityEntry(BaseModel):
+    timestamp: str
+    user: str
+    action: str
+    detail: str
+
+
+class ActivityResponse(BaseModel):
+    entries: list[ActivityEntry]
+    total_in_file: int
+
+
+# ============================================================================
 # AUTH ENDPOINTS
 # ============================================================================
 
@@ -654,7 +712,7 @@ async def health_check():
 async def search_sales(
     q: str = Query(..., min_length=3, description="Search query"),
     limit: int = Query(default=20, ge=1, le=100),
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Search sales by name. Returns matching sales with lot counts."""
     conn = get_connection()
@@ -803,7 +861,7 @@ def compute_price_stats(cursor, sale_ids: list[int]) -> tuple[SalePriceStats | N
 @app.get("/api/sales/{sale_id}", response_model=SaleDetailResponse)
 async def get_sale_detail(
     sale_id: int,
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Get detailed information about a sale including enhanced price stats and prior year comparison."""
     conn = get_connection()
@@ -1077,7 +1135,7 @@ async def score_sale(
     sale_id: int,
     output: Literal["none", "csv", "db"] = Query(default="none"),
     session_median: Optional[float] = Query(default=None, description="Manual session median price override"),
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Score all lots for a sale.
 
@@ -1160,6 +1218,8 @@ async def score_sale(
         for _, row in results_df.iterrows()
     ]
 
+    log_activity(user, "POST", f"/api/score/{sale_id}", f"Scored {len(lots)} lots for sale {sale_id} (output={output})")
+
     return ScoreResponse(
         sale_id=sale_id,
         country_code=country_code,
@@ -1175,7 +1235,7 @@ async def score_sale(
 async def commit_lots(
     sale_id: int,
     request: CommitLotsRequest,
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """
     Commit selected lots to database.
@@ -1220,6 +1280,8 @@ async def commit_lots(
     # Upsert to database
     inserted, updated = upsert_to_database(results_df, country_code)
 
+    log_activity(user, "POST", f"/api/score/{sale_id}/commit", f"Committed {len(request.lots)} lots (inserted={inserted}, updated={updated})")
+
     return CommitLotsResponse(
         sale_id=sale_id,
         country_code=country_code,
@@ -1233,7 +1295,7 @@ async def commit_lots(
 async def score_and_compare(
     sale_id: int,
     session_median: Optional[float] = Query(default=None, description="Manual session median price override"),
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """
     Score sale and compare with existing database values.
@@ -1365,6 +1427,8 @@ async def score_and_compare(
     avg_price_delta = sum(d["absolute"] for d in deltas) / len(deltas) if deltas else 0.0
     avg_price_delta_pct = sum(d["pct"] for d in deltas) / len(deltas) if deltas else 0.0
 
+    log_activity(user, "POST", f"/api/score/{sale_id}/compare", f"Compared {total_lots} lots for sale {sale_id}")
+
     return CompareResponse(
         sale_id=sale_id,
         country_code=country_code,
@@ -1436,7 +1500,7 @@ def run_training(country: str, version: str):
 
 @app.get("/api/train/status", response_model=TrainingStatusResponse)
 async def get_training_status(
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Get current training job status."""
     return TrainingStatusResponse(**training_state)
@@ -1447,7 +1511,7 @@ async def train_model_endpoint(
     country: str,
     background_tasks: BackgroundTasks,
     version: Optional[str] = Query(default=None, description="Force specific version (e.g., v5)"),
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """
     Train a new model for a specific country.
@@ -1474,8 +1538,10 @@ async def train_model_endpoint(
     # Start training in background
     background_tasks.add_task(run_training, country, version)
 
+    log_activity(user, "POST", f"/api/train/{country}", f"Started training {country.upper()} {version}")
+
     return TrainResponse(
-        message=f"Training started for {country.upper()}. Check GET /api/train/status for progress.",
+        message=f"Training started for {country.upper()}",
         country=country.upper(),
         version=version,
         output_dir=output_dir,
@@ -1639,7 +1705,7 @@ def parse_feature_importance(importance_path: Path) -> dict:
 @app.get("/api/models/{country}", response_model=ModelsListResponse)
 async def list_models(
     country: str,
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """
     List all model versions for a country with training metrics.
@@ -1741,7 +1807,7 @@ MODEL_REQUIRED_FILES = [
 @app.get("/api/models/{model_name}/download")
 async def download_model(
     model_name: str,
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """
     Download a model as a ZIP file.
@@ -1776,7 +1842,7 @@ async def download_model(
 async def upload_model(
     model_name: str,
     file: UploadFile = File(...),
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """
     Upload a new model from a ZIP file.
@@ -1828,6 +1894,8 @@ async def upload_model(
     total_size = sum(f.stat().st_size for f in model_dir.iterdir() if f.is_file())
     extracted_files = [f.name for f in model_dir.iterdir() if f.is_file()]
 
+    log_activity(user, "POST", f"/api/models/{model_name}", f"Uploaded model {model_name}")
+
     return ModelUploadResponse(
         model_name=model_name,
         files=extracted_files,
@@ -1839,7 +1907,7 @@ async def upload_model(
 @app.delete("/api/models/{model_name}", response_model=ModelDeleteResponse)
 async def delete_model(
     model_name: str,
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """
     Delete a model.
@@ -1869,6 +1937,8 @@ async def delete_model(
     # Delete the model directory
     shutil.rmtree(model_dir)
 
+    log_activity(user, "DELETE", f"/api/models/{model_name}", f"Deleted model {model_name}")
+
     return ModelDeleteResponse(
         model_name=model_name,
         message=f"Model '{model_name}' deleted successfully"
@@ -1882,7 +1952,7 @@ async def delete_model(
 
 @app.get("/api/config", response_model=FullConfigResponse)
 async def get_full_config(
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Get full configuration including all regions."""
     regions = {}
@@ -1916,7 +1986,7 @@ async def get_full_config(
 # Years endpoints - must be defined before {country} to avoid route conflict
 @app.get("/api/config/years", response_model=YearsConfigResponse)
 async def get_years_config(
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Get the year range for training/scoring. year_end uses current year if not set."""
     return YearsConfigResponse(
@@ -1929,7 +1999,7 @@ async def get_years_config(
 async def set_years_config(
     year_start: int = Query(..., ge=2000, le=2100, description="Start year"),
     year_end: Optional[int] = Query(default=None, ge=2000, le=2100, description="End year (null = current year)"),
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Set the year range for training/scoring. Set year_end to null to use current year."""
     effective_year_end = year_end if year_end is not None else config.app.get_year_end()
@@ -1941,12 +2011,14 @@ async def set_years_config(
     data["year_end"] = year_end  # Can be null
     save_config_json(data)
 
+    log_activity(user, "PUT", "/api/config/years", f"Set years {year_start}-{effective_year_end}")
+
     return YearsConfigResponse(year_start=year_start, year_end=effective_year_end)
 
 
 @app.get("/api/config/test-years", response_model=TestYearsConfigResponse)
 async def get_test_years_config(
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Get model_test_last_years - number of years to hold out for testing."""
     return TestYearsConfigResponse(model_test_last_years=config.app.model_test_last_years)
@@ -1955,19 +2027,21 @@ async def get_test_years_config(
 @app.put("/api/config/test-years", response_model=TestYearsConfigResponse)
 async def set_test_years_config(
     model_test_last_years: int = Query(..., ge=1, le=10, description="Number of years to hold out for testing"),
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Set model_test_last_years - number of years to hold out for testing."""
     data = load_config_json()
     data["model_test_last_years"] = model_test_last_years
     save_config_json(data)
 
+    log_activity(user, "PUT", "/api/config/test-years", f"Set test years to {model_test_last_years}")
+
     return TestYearsConfigResponse(model_test_last_years=model_test_last_years)
 
 
 @app.get("/api/config/sale-history-years", response_model=SaleHistoryYearsConfigResponse)
 async def get_sale_history_years_config(
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Get sale_history_years - number of years of history to include in sale detail."""
     return SaleHistoryYearsConfigResponse(sale_history_years=config.app.sale_history_years)
@@ -1976,12 +2050,14 @@ async def get_sale_history_years_config(
 @app.put("/api/config/sale-history-years", response_model=SaleHistoryYearsConfigResponse)
 async def set_sale_history_years_config(
     sale_history_years: int = Query(..., ge=0, le=20, description="Number of years of history (0 to disable)"),
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Set sale_history_years - number of years of history to include in sale detail."""
     data = load_config_json()
     data["sale_history_years"] = sale_history_years
     save_config_json(data)
+
+    log_activity(user, "PUT", "/api/config/sale-history-years", f"Set sale history years to {sale_history_years}")
 
     return SaleHistoryYearsConfigResponse(sale_history_years=sale_history_years)
 
@@ -1990,7 +2066,7 @@ async def set_sale_history_years_config(
 @app.get("/api/config/{country}", response_model=RegionConfig)
 async def get_region_config(
     country: str,
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Get configuration for a specific region."""
     country = country.upper()
@@ -2020,7 +2096,7 @@ async def get_region_config(
 async def update_region_config(
     country: str,
     updates: dict,
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """
     Partial or full update for an existing region.
@@ -2039,6 +2115,8 @@ async def update_region_config(
     existing = data["regions"][country]
     data["regions"][country] = deep_merge(existing, updates)
     save_config_json(data)
+
+    log_activity(user, "POST", f"/api/config/{country}", f"Updated config for {country}")
 
     # Return updated config
     region = config.app.get_region(country)
@@ -2063,7 +2141,7 @@ async def update_region_config(
 async def create_region_config(
     country: str,
     region_config: RegionConfig,
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """
     Add a new region (full config required).
@@ -2090,13 +2168,15 @@ async def create_region_config(
     }
     save_config_json(data)
 
+    log_activity(user, "PUT", f"/api/config/{country}", f"Created region {country}")
+
     return region_config
 
 
 @app.delete("/api/config/{country}")
 async def delete_region_config(
     country: str,
-    _auth: None = Security(verify_auth),
+    user: str = Security(verify_auth),
 ):
     """Remove a region from configuration."""
     country = country.upper()
@@ -2108,7 +2188,41 @@ async def delete_region_config(
     del data["regions"][country]
     save_config_json(data)
 
+    log_activity(user, "DELETE", f"/api/config/{country}", f"Deleted region {country}")
+
     return {"message": f"Region {country} removed"}
+
+
+# ============================================================================
+# ACTIVITY LOG ENDPOINT
+# ============================================================================
+
+
+@app.get("/api/activity", response_model=ActivityResponse)
+async def get_activity_log(
+    limit: int = Query(default=50, ge=1, le=500, description="Number of recent entries to return"),
+    user: str = Security(verify_auth),
+):
+    """Get recent activity log entries."""
+    if not ACTIVITY_LOG_PATH.exists():
+        return ActivityResponse(entries=[], total_in_file=0)
+
+    with open(ACTIVITY_LOG_PATH) as f:
+        all_lines = f.readlines()
+
+    total = len(all_lines)
+    recent_lines = deque(all_lines, maxlen=limit)
+
+    entries = []
+    for line in recent_lines:
+        line = line.strip()
+        if line:
+            try:
+                entries.append(ActivityEntry(**json.loads(line)))
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+    return ActivityResponse(entries=entries, total_in_file=total)
 
 
 # ============================================================================
