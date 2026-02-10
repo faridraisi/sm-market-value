@@ -170,7 +170,8 @@ def _rotate_if_needed():
         pass
 
 
-def log_activity(user: str, method: str, path: str, detail: str):
+def log_activity(user: str, method: str, path: str, detail: str,
+                 category: str = "general", status: str = "success"):
     """Append a JSON line to the activity log."""
     ACTIVITY_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     _rotate_if_needed()
@@ -179,6 +180,8 @@ def log_activity(user: str, method: str, path: str, detail: str):
         "user": user,
         "action": f"{method} {path}",
         "detail": detail,
+        "category": category,
+        "status": status,
     }
     try:
         with open(ACTIVITY_LOG_PATH, "a") as f:
@@ -632,6 +635,8 @@ class ActivityEntry(BaseModel):
     user: str
     action: str
     detail: str
+    category: str = "general"
+    status: str = "success"
 
 
 class ActivityResponse(BaseModel):
@@ -654,6 +659,7 @@ async def request_otp(request: OTPRequest):
         raise HTTPException(status_code=500, detail="Email whitelist not configured")
 
     if email not in whitelist:
+        log_activity(email, "POST", "/auth/request-otp", f"OTP rejected - email not authorized", category="auth", status="error")
         raise HTTPException(status_code=403, detail="Email not authorized")
 
     # Generate 6-digit OTP
@@ -663,6 +669,7 @@ async def request_otp(request: OTPRequest):
     if not send_otp_email(email, code):
         raise HTTPException(status_code=500, detail="Failed to send email")
 
+    log_activity(email, "POST", "/auth/request-otp", f"OTP requested for {email}", category="auth")
     return OTPRequestResponse(message=f"OTP sent to {email}")
 
 
@@ -673,9 +680,11 @@ async def verify_otp(request: OTPVerifyRequest):
     record = otp_store.get(email)
 
     if not record or time.time() > record.expires_at:
+        log_activity(email, "POST", "/auth/verify-otp", f"Login failed for {email}", category="auth", status="error")
         raise HTTPException(status_code=401, detail="OTP expired or not found")
 
     if record.code != request.code:
+        log_activity(email, "POST", "/auth/verify-otp", f"Login failed for {email}", category="auth", status="error")
         raise HTTPException(status_code=401, detail="Invalid OTP")
 
     # Remove OTP after successful verification (one-time use)
@@ -685,6 +694,7 @@ async def verify_otp(request: OTPVerifyRequest):
     token = create_jwt_token(email)
     expiry_hours = int(os.getenv("JWT_EXPIRY_HOURS", 24))
 
+    log_activity(email, "POST", "/auth/verify-otp", f"Login successful for {email}", category="auth")
     return OTPVerifyResponse(
         access_token=token,
         expires_in=expiry_hours * 3600
@@ -1218,7 +1228,7 @@ async def score_sale(
         for _, row in results_df.iterrows()
     ]
 
-    log_activity(user, "POST", f"/api/score/{sale_id}", f"Scored {len(lots)} lots for sale {sale_id} (output={output})")
+    log_activity(user, "POST", f"/api/score/{sale_id}", f"Scored {len(lots)} lots for sale {sale_id} (output={output})", category="score")
 
     return ScoreResponse(
         sale_id=sale_id,
@@ -1280,7 +1290,7 @@ async def commit_lots(
     # Upsert to database
     inserted, updated = upsert_to_database(results_df, country_code)
 
-    log_activity(user, "POST", f"/api/score/{sale_id}/commit", f"Committed {len(request.lots)} lots (inserted={inserted}, updated={updated})")
+    log_activity(user, "POST", f"/api/score/{sale_id}/commit", f"Committed {len(request.lots)} lots (inserted={inserted}, updated={updated})", category="score")
 
     return CommitLotsResponse(
         sale_id=sale_id,
@@ -1427,7 +1437,7 @@ async def score_and_compare(
     avg_price_delta = sum(d["absolute"] for d in deltas) / len(deltas) if deltas else 0.0
     avg_price_delta_pct = sum(d["pct"] for d in deltas) / len(deltas) if deltas else 0.0
 
-    log_activity(user, "POST", f"/api/score/{sale_id}/compare", f"Compared {total_lots} lots for sale {sale_id}")
+    log_activity(user, "POST", f"/api/score/{sale_id}/compare", f"Compared {total_lots} lots for sale {sale_id}", category="score")
 
     return CompareResponse(
         sale_id=sale_id,
@@ -1472,7 +1482,7 @@ class TrainingStatusResponse(BaseModel):
     error: Optional[str] = None
 
 
-def run_training(country: str, version: str):
+def run_training(country: str, version: str, user: str):
     """Background task to run model training."""
     training_state["active"] = True
     training_state["country"] = country.upper()
@@ -1490,9 +1500,11 @@ def run_training(country: str, version: str):
         train_model(country=country, version=version, on_progress=on_progress)
         training_state["status"] = "completed"
         training_state["phase"] = "done"
+        log_activity(user, "POST", f"/api/train/{country}", f"Completed training {country.upper()} {version}", category="train")
     except Exception as e:
         training_state["status"] = "failed"
         training_state["error"] = str(e)
+        log_activity(user, "POST", f"/api/train/{country}", f"Training failed for {country.upper()} {version}: {e}", category="train", status="error")
     finally:
         training_state["active"] = False
         training_state["completed_at"] = datetime.now(timezone.utc).isoformat()
@@ -1536,9 +1548,9 @@ async def train_model_endpoint(
     output_dir = f"models/{country}_{version}"
 
     # Start training in background
-    background_tasks.add_task(run_training, country, version)
+    background_tasks.add_task(run_training, country, version, user)
 
-    log_activity(user, "POST", f"/api/train/{country}", f"Started training {country.upper()} {version}")
+    log_activity(user, "POST", f"/api/train/{country}", f"Started training {country.upper()} {version}", category="train")
 
     return TrainResponse(
         message=f"Training started for {country.upper()}",
@@ -1894,7 +1906,7 @@ async def upload_model(
     total_size = sum(f.stat().st_size for f in model_dir.iterdir() if f.is_file())
     extracted_files = [f.name for f in model_dir.iterdir() if f.is_file()]
 
-    log_activity(user, "POST", f"/api/models/{model_name}", f"Uploaded model {model_name}")
+    log_activity(user, "POST", f"/api/models/{model_name}", f"Uploaded model {model_name}", category="model")
 
     return ModelUploadResponse(
         model_name=model_name,
@@ -1937,7 +1949,7 @@ async def delete_model(
     # Delete the model directory
     shutil.rmtree(model_dir)
 
-    log_activity(user, "DELETE", f"/api/models/{model_name}", f"Deleted model {model_name}")
+    log_activity(user, "DELETE", f"/api/models/{model_name}", f"Deleted model {model_name}", category="model")
 
     return ModelDeleteResponse(
         model_name=model_name,
@@ -2011,7 +2023,7 @@ async def set_years_config(
     data["year_end"] = year_end  # Can be null
     save_config_json(data)
 
-    log_activity(user, "PUT", "/api/config/years", f"Set years {year_start}-{effective_year_end}")
+    log_activity(user, "PUT", "/api/config/years", f"Set years {year_start}-{effective_year_end}", category="config")
 
     return YearsConfigResponse(year_start=year_start, year_end=effective_year_end)
 
@@ -2034,7 +2046,7 @@ async def set_test_years_config(
     data["model_test_last_years"] = model_test_last_years
     save_config_json(data)
 
-    log_activity(user, "PUT", "/api/config/test-years", f"Set test years to {model_test_last_years}")
+    log_activity(user, "PUT", "/api/config/test-years", f"Set test years to {model_test_last_years}", category="config")
 
     return TestYearsConfigResponse(model_test_last_years=model_test_last_years)
 
@@ -2057,7 +2069,7 @@ async def set_sale_history_years_config(
     data["sale_history_years"] = sale_history_years
     save_config_json(data)
 
-    log_activity(user, "PUT", "/api/config/sale-history-years", f"Set sale history years to {sale_history_years}")
+    log_activity(user, "PUT", "/api/config/sale-history-years", f"Set sale history years to {sale_history_years}", category="config")
 
     return SaleHistoryYearsConfigResponse(sale_history_years=sale_history_years)
 
@@ -2116,7 +2128,7 @@ async def update_region_config(
     data["regions"][country] = deep_merge(existing, updates)
     save_config_json(data)
 
-    log_activity(user, "POST", f"/api/config/{country}", f"Updated config for {country}")
+    log_activity(user, "POST", f"/api/config/{country}", f"Updated config for {country}", category="config")
 
     # Return updated config
     region = config.app.get_region(country)
@@ -2168,7 +2180,7 @@ async def create_region_config(
     }
     save_config_json(data)
 
-    log_activity(user, "PUT", f"/api/config/{country}", f"Created region {country}")
+    log_activity(user, "PUT", f"/api/config/{country}", f"Created region {country}", category="config")
 
     return region_config
 
@@ -2188,7 +2200,7 @@ async def delete_region_config(
     del data["regions"][country]
     save_config_json(data)
 
-    log_activity(user, "DELETE", f"/api/config/{country}", f"Deleted region {country}")
+    log_activity(user, "DELETE", f"/api/config/{country}", f"Deleted region {country}", category="config")
 
     return {"message": f"Region {country} removed"}
 
@@ -2201,9 +2213,11 @@ async def delete_region_config(
 @app.get("/api/activity", response_model=ActivityResponse)
 async def get_activity_log(
     limit: int = Query(default=50, ge=1, le=500, description="Number of recent entries to return"),
+    category: Optional[str] = Query(default=None, description="Filter: score, train, model, config, auth"),
+    status: Optional[str] = Query(default=None, description="Filter: success, error"),
     user: str = Security(verify_auth),
 ):
-    """Get recent activity log entries."""
+    """Get recent activity log entries, optionally filtered by category and/or status."""
     if not ACTIVITY_LOG_PATH.exists():
         return ActivityResponse(entries=[], total_in_file=0)
 
@@ -2211,16 +2225,25 @@ async def get_activity_log(
         all_lines = f.readlines()
 
     total = len(all_lines)
-    recent_lines = deque(all_lines, maxlen=limit)
 
-    entries = []
-    for line in recent_lines:
+    # Parse all entries
+    parsed = []
+    for line in all_lines:
         line = line.strip()
         if line:
             try:
-                entries.append(ActivityEntry(**json.loads(line)))
+                parsed.append(ActivityEntry(**json.loads(line)))
             except (json.JSONDecodeError, ValueError):
                 pass
+
+    # Apply filters
+    if category:
+        parsed = [e for e in parsed if e.category == category]
+    if status:
+        parsed = [e for e in parsed if e.status == status]
+
+    # Take last N entries
+    entries = list(deque(parsed, maxlen=limit))
 
     return ActivityResponse(entries=entries, total_in_file=total)
 

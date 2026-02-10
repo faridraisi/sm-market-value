@@ -3,7 +3,7 @@
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
 **Base URL:** `http://localhost:8000` (development) or `https://smmarketvalue.stallionmatch.horse` (production)
-**API Version:** 2.14.0
+**API Version:** 2.15.0
 
 ---
 
@@ -1484,13 +1484,13 @@ DELETE /api/config/{country}
 
 ## Activity Log
 
-All mutating API actions (POST/PUT/DELETE) are logged to a file-based activity log. Each entry records the authenticated user, action, and a human-readable detail message.
+All mutating API actions (POST/PUT/DELETE) and auth events are logged to a file-based activity log. Each entry records the authenticated user, action, a human-readable detail message, a category, and a status (success/error).
 
 The log file is stored at `logs/activity.jsonl` and rotates automatically when it exceeds 20 MB or 26 days (configurable via `ACTIVITY_LOG_MAX_MB` and `ACTIVITY_LOG_MAX_DAYS` environment variables).
 
 ### Get Activity Log
 
-Get recent activity log entries.
+Get recent activity log entries, optionally filtered by category and/or status.
 
 ```
 GET /api/activity
@@ -1501,6 +1501,8 @@ GET /api/activity
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
 | `limit` | integer | 50 | 1-500 | Number of recent entries to return |
+| `category` | string | null | - | Filter by category: `score`, `train`, `model`, `config`, `auth` |
+| `status` | string | null | - | Filter by status: `success`, `error` |
 
 **Response:**
 ```json
@@ -1510,13 +1512,33 @@ GET /api/activity
       "timestamp": "2026-02-10T04:12:33+00:00",
       "user": "farid@g1goldmine.com",
       "action": "POST /api/score/2094/commit",
-      "detail": "Committed 156 lots (inserted=12, updated=144)"
+      "detail": "Committed 156 lots (inserted=12, updated=144)",
+      "category": "score",
+      "status": "success"
     },
     {
       "timestamp": "2026-02-10T04:10:15+00:00",
       "user": "api_key",
       "action": "POST /api/train/aus",
-      "detail": "Started training AUS v5"
+      "detail": "Started training AUS v5",
+      "category": "train",
+      "status": "success"
+    },
+    {
+      "timestamp": "2026-02-10T04:15:30+00:00",
+      "user": "api_key",
+      "action": "POST /api/train/aus",
+      "detail": "Completed training AUS v5",
+      "category": "train",
+      "status": "success"
+    },
+    {
+      "timestamp": "2026-02-10T04:05:00+00:00",
+      "user": "farid@g1goldmine.com",
+      "action": "POST /auth/verify-otp",
+      "detail": "Login successful for farid@g1goldmine.com",
+      "category": "auth",
+      "status": "success"
     }
   ],
   "total_in_file": 42
@@ -1532,24 +1554,48 @@ GET /api/activity
 | `entries[].user` | string | User identity: email for JWT auth, `"api_key"` for API key auth |
 | `entries[].action` | string | HTTP method and path (e.g., `"POST /api/score/2094"`) |
 | `entries[].detail` | string | Human-readable description of the action |
+| `entries[].category` | string | Category: `score`, `train`, `model`, `config`, `auth` |
+| `entries[].status` | string | Outcome: `success` or `error` |
 | `total_in_file` | integer | Total number of entries in the current log file |
 
 **Logged Actions:**
 
-| Endpoint | Example Detail |
-|----------|---------------|
-| `POST /api/score/{sale_id}` | `"Scored 806 lots for sale 2094 (output=none)"` |
-| `POST /api/score/{sale_id}/commit` | `"Committed 156 lots (inserted=12, updated=144)"` |
-| `POST /api/score/{sale_id}/compare` | `"Compared 490 lots for sale 2101"` |
-| `POST /api/train/{country}` | `"Started training AUS v5"` |
-| `POST /api/models/{model_name}` | `"Uploaded model aus_v9"` |
-| `DELETE /api/models/{model_name}` | `"Deleted model aus_v9"` |
-| `POST /api/config/{country}` | `"Updated config for AUS"` |
-| `PUT /api/config/{country}` | `"Created region GBR"` |
-| `DELETE /api/config/{country}` | `"Deleted region GBR"` |
-| `PUT /api/config/years` | `"Set years 2020-2026"` |
-| `PUT /api/config/test-years` | `"Set test years to 2"` |
-| `PUT /api/config/sale-history-years` | `"Set sale history years to 5"` |
+| Endpoint | Category | Status | Example Detail |
+|----------|----------|--------|---------------|
+| `POST /auth/request-otp` | `auth` | `success` | `"OTP requested for user@company.com"` |
+| `POST /auth/request-otp` | `auth` | `error` | `"OTP rejected - email not authorized"` |
+| `POST /auth/verify-otp` | `auth` | `success` | `"Login successful for user@company.com"` |
+| `POST /auth/verify-otp` | `auth` | `error` | `"Login failed for user@company.com"` |
+| `POST /api/score/{sale_id}` | `score` | `success` | `"Scored 806 lots for sale 2094 (output=none)"` |
+| `POST /api/score/{sale_id}/commit` | `score` | `success` | `"Committed 156 lots (inserted=12, updated=144)"` |
+| `POST /api/score/{sale_id}/compare` | `score` | `success` | `"Compared 490 lots for sale 2101"` |
+| `POST /api/train/{country}` | `train` | `success` | `"Started training AUS v5"` |
+| `POST /api/train/{country}` | `train` | `success` | `"Completed training AUS v5"` |
+| `POST /api/train/{country}` | `train` | `error` | `"Training failed for AUS v5: log1p error"` |
+| `POST /api/models/{model_name}` | `model` | `success` | `"Uploaded model aus_v9"` |
+| `DELETE /api/models/{model_name}` | `model` | `success` | `"Deleted model aus_v9"` |
+| `POST /api/config/{country}` | `config` | `success` | `"Updated config for AUS"` |
+| `PUT /api/config/{country}` | `config` | `success` | `"Created region GBR"` |
+| `DELETE /api/config/{country}` | `config` | `success` | `"Deleted region GBR"` |
+| `PUT /api/config/years` | `config` | `success` | `"Set years 2020-2026"` |
+| `PUT /api/config/test-years` | `config` | `success` | `"Set test years to 2"` |
+| `PUT /api/config/sale-history-years` | `config` | `success` | `"Set sale history years to 5"` |
+
+**Filtering Examples:**
+
+```bash
+# All entries (default)
+curl "http://localhost:8000/api/activity" -H "X-API-Key: $API_KEY"
+
+# Only training errors
+curl "http://localhost:8000/api/activity?category=train&status=error" -H "X-API-Key: $API_KEY"
+
+# Only auth events
+curl "http://localhost:8000/api/activity?category=auth" -H "X-API-Key: $API_KEY"
+
+# Only failures across all categories
+curl "http://localhost:8000/api/activity?status=error" -H "X-API-Key: $API_KEY"
+```
 
 ---
 
@@ -2054,6 +2100,18 @@ curl "http://localhost:8000/api/activity" \
 
 # Get last 10 entries
 curl "http://localhost:8000/api/activity?limit=10" \
+  -H "X-API-Key: $API_KEY"
+
+# Filter by category
+curl "http://localhost:8000/api/activity?category=train" \
+  -H "X-API-Key: $API_KEY"
+
+# Filter by status (errors only)
+curl "http://localhost:8000/api/activity?status=error" \
+  -H "X-API-Key: $API_KEY"
+
+# Combined filter (training errors only)
+curl "http://localhost:8000/api/activity?category=train&status=error" \
   -H "X-API-Key: $API_KEY"
 ```
 

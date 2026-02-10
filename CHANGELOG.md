@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.15.0] - 2026-02-10
+
+### Added
+- **Activity log categories and status** - Each log entry now includes `category` and `status` fields
+  - Categories: `score`, `train`, `model`, `config`, `auth`
+  - Status: `success` or `error`
+- **Auth event logging** - OTP requests and login attempts are now logged (success and failure)
+- **Training completion/failure logging** - Background training logs completion and error outcomes
+- **Activity log filtering** - `GET /api/activity` now supports `category` and `status` query params
+
 ## [2.14.0] - 2026-02-10
 
 ### Added

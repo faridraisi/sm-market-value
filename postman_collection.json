@@ -744,6 +744,89 @@
 								{
 									"key": "limit",
 									"value": "50"
+								},
+								{
+									"key": "category",
+									"value": "train",
+									"disabled": true
+								},
+								{
+									"key": "status",
+									"value": "error",
+									"disabled": true
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Activity Log (training errors)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/activity?category=train&status=error",
+							"host": ["{{base_url}}"],
+							"path": ["api", "activity"],
+							"query": [
+								{
+									"key": "category",
+									"value": "train"
+								},
+								{
+									"key": "status",
+									"value": "error"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Activity Log (auth events)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/activity?category=auth",
+							"host": ["{{base_url}}"],
+							"path": ["api", "activity"],
+							"query": [
+								{
+									"key": "category",
+									"value": "auth"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Activity Log (all errors)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/activity?status=error",
+							"host": ["{{base_url}}"],
+							"path": ["api", "activity"],
+							"query": [
+								{
+									"key": "status",
+									"value": "error"
 								}
 							]
 						}
