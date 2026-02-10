@@ -89,8 +89,15 @@ def send_otp_email(email: str, code: str) -> bool:
             },
             json={
                 "to": email,
-                "subject": "Your Market Value API Login Code",
-                "body_text": f"Your verification code is: {code}\n\nThis code expires in 10 minutes."
+                "subject": f"Market Value API - Verification Code: {code}",
+                "body_text": (
+                    f"Hi,\n\n"
+                    f"Your one-time verification code for the Market Value API is:\n\n"
+                    f"    {code}\n\n"
+                    f"This code is valid for 10 minutes. If you did not request this code, "
+                    f"please ignore this email.\n\n"
+                    f"- StallionMatch Market Value"
+                ),
             },
             timeout=10.0
         )
