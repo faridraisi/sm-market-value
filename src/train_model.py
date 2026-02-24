@@ -317,7 +317,8 @@ def prepare_features(df: pd.DataFrame) -> tuple:
     ]
     for col in price_cols:
         if col in df.columns:
-            df[f"log_{col}"] = np.log1p(df[col].fillna(0))
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            df[f"log_{col}"] = np.log1p(df[col])
 
     # Encode categoricals
     for col in ["sex", "vendor_volume_bucket", "sale_company"]:

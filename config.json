@@ -6,7 +6,7 @@
   "audit_user_id": 2,
   "regions": {
     "AUS": {
-      "model": "aus_v66",
+      "model": "aus_v7",
       "currency_id": 1,
       "hist_countries": [
         "AUS"

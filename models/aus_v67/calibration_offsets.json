@@ -1,0 +1,9 @@
+{
+  "offset_p25": -0.009386297253199949,
+  "offset_p75": 0.06810773226928879,
+  "calibrated_coverage_p25": 25.32180948878264,
+  "calibrated_coverage_p75": 75.39536594336153,
+  "generated_at": "2026-02-10T23:55:56.950155+00:00",
+  "model_version": "v67",
+  "notes": "Trained on 2026-02-11. Elite scaling: offset = base_offset + (ln(raw_p50) - ln(threshold)) * scaling_factor"
+}
