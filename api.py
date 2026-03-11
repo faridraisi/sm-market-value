@@ -13,6 +13,7 @@ import shutil
 import time
 import zipfile
 from collections import deque
+from difflib import SequenceMatcher
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -428,6 +429,8 @@ class PriorYearStats(BaseModel):
 class SaleHistoryYear(BaseModel):
     year: int
     sale_ids: list[int]
+    sale_names: list[str] = []
+    sale_type_ids: list[int] = []
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     total_lots: int
@@ -775,6 +778,37 @@ async def search_sales(
     return SaleSearchResponse(query=q, results=results)
 
 
+def find_matching_sales(cursor, sale_name: str, company_id: int, exclude_sale_id: int = None,
+                        min_year: int = None, max_year: int = None, similarity_threshold: float = 0.75):
+    """Find historical sales from the same company with fuzzy name matching."""
+    conditions = ["salesCompanyId = ?"]
+    params = [company_id]
+    if min_year is not None:
+        conditions.append("YEAR(startDate) >= ?")
+        params.append(min_year)
+    if max_year is not None:
+        conditions.append("YEAR(startDate) <= ?")
+        params.append(max_year)
+    if exclude_sale_id is not None:
+        conditions.append("Id != ?")
+        params.append(exclude_sale_id)
+
+    query = f"""
+        SELECT Id, salesName, salesTypeId, YEAR(startDate) AS sale_year,
+               CAST(startDate AS DATE) AS start_date,
+               CAST(endDate AS DATE) AS end_date
+        FROM tblSales
+        WHERE {' AND '.join(conditions)}
+        ORDER BY startDate
+    """
+    cursor.execute(query, params)
+    candidates = cursor.fetchall()
+
+    name_lower = sale_name.lower()
+    return [row for row in candidates
+            if SequenceMatcher(None, name_lower, row.salesName.lower()).ratio() >= similarity_threshold]
+
+
 def compute_price_stats(cursor, sale_ids: list[int]) -> tuple[SalePriceStats | None, int, int, int, int, float | None]:
     """
     Compute enhanced price stats for one or more sales.
@@ -950,25 +984,14 @@ async def get_sale_detail(
     cursor.execute(queue_query, (sale_id,))
     queue_row = cursor.fetchone()
 
-    # Find prior year sales (same company, type, and month from previous year)
+    # Find prior year sales (same company, fuzzy name match)
     prior_year = None
-    if sale_row.start_date and sale_row.sales_company_id and sale_row.sales_type_id:
-        prior_year_query = """
-            SELECT Id, salesName, CAST(startDate AS DATE) AS start_date, CAST(endDate AS DATE) AS end_date
-            FROM tblSales
-            WHERE salesCompanyId = ?
-              AND salesTypeId = ?
-              AND MONTH(startDate) = MONTH(?)
-              AND YEAR(startDate) = YEAR(?) - 1
-            ORDER BY startDate
-        """
-        cursor.execute(prior_year_query, (
-            sale_row.sales_company_id,
-            sale_row.sales_type_id,
-            sale_row.start_date,
-            sale_row.start_date,
-        ))
-        prior_sales = cursor.fetchall()
+    if sale_row.start_date and sale_row.sales_company_id and sale_row.sale_name:
+        prior_year_num = sale_row.start_date.year - 1
+        prior_sales = find_matching_sales(
+            cursor, sale_row.sale_name, sale_row.sales_company_id,
+            exclude_sale_id=sale_id, min_year=prior_year_num, max_year=prior_year_num
+        )
 
         if prior_sales:
             prior_sale_ids = [row.Id for row in prior_sales]
@@ -1029,38 +1052,24 @@ async def get_sale_detail(
                 yoy_change=yoy_change,
             )
 
-    # Build history (configurable number of years)
+    # Build history (configurable number of years, fuzzy name match)
     history = []
     history_years = config.app.sale_history_years
-    if history_years > 0 and sale_row.start_date and sale_row.sales_company_id and sale_row.sales_type_id:
+    if history_years > 0 and sale_row.start_date and sale_row.sales_company_id and sale_row.sale_name:
         current_year = sale_row.start_date.year
-        history_query = """
-            SELECT Id, YEAR(startDate) AS sale_year,
-                   CAST(startDate AS DATE) AS start_date,
-                   CAST(endDate AS DATE) AS end_date
-            FROM tblSales
-            WHERE salesCompanyId = ?
-              AND salesTypeId = ?
-              AND MONTH(startDate) = MONTH(?)
-              AND YEAR(startDate) >= ?
-              AND YEAR(startDate) < ?
-            ORDER BY startDate
-        """
-        cursor.execute(history_query, (
-            sale_row.sales_company_id,
-            sale_row.sales_type_id,
-            sale_row.start_date,
-            current_year - history_years,
-            current_year,
-        ))
-        history_sales = cursor.fetchall()
+        history_sales = find_matching_sales(
+            cursor, sale_row.sale_name, sale_row.sales_company_id,
+            exclude_sale_id=sale_id, min_year=current_year - history_years, max_year=current_year - 1
+        )
 
         if history_sales:
             # Group by year with dates
             from collections import defaultdict
-            sales_by_year = defaultdict(lambda: {"ids": [], "start_dates": [], "end_dates": []})
+            sales_by_year = defaultdict(lambda: {"ids": [], "names": [], "type_ids": [], "start_dates": [], "end_dates": []})
             for row in history_sales:
                 sales_by_year[row.sale_year]["ids"].append(row.Id)
+                sales_by_year[row.sale_year]["names"].append(row.salesName)
+                sales_by_year[row.sale_year]["type_ids"].append(row.salesTypeId)
                 if row.start_date:
                     sales_by_year[row.sale_year]["start_dates"].append(row.start_date)
                 if row.end_date:
@@ -1079,6 +1088,8 @@ async def get_sale_detail(
                 history.append(SaleHistoryYear(
                     year=year,
                     sale_ids=year_sale_ids,
+                    sale_names=year_data["names"],
+                    sale_type_ids=year_data["type_ids"],
                     start_date=str(year_start) if year_start else None,
                     end_date=str(year_end) if year_end else None,
                     total_lots=year_total,
@@ -1175,9 +1186,20 @@ async def score_sale(
     if features_df.empty:
         raise HTTPException(status_code=404, detail=f"No lots found for sale {sale_id}")
 
+    # Check session median is available (needed for scoring)
+    if features_df["session_median_price"].isna().all() or (features_df["session_median_price"] == 0).all():
+        raise HTTPException(
+            status_code=422,
+            detail="No session median available. This sale has no sold lots and no prior year history. "
+                   "Please provide a session_median query parameter."
+        )
+
     # Load models and score
-    model_dir = get_model_dir(country_code)
-    models, offsets, feature_cols = load_models(model_dir)
+    try:
+        model_dir = get_model_dir(country_code)
+        models, offsets, feature_cols = load_models(model_dir)
+    except (ValueError, FileNotFoundError) as e:
+        raise HTTPException(status_code=422, detail=f"No model available for country '{country_code}': {e}")
     results_df = score_lots(features_df, models, offsets, feature_cols, country_code)
 
     # Handle output
@@ -1340,9 +1362,22 @@ async def score_and_compare(
         conn.close()
         raise HTTPException(status_code=404, detail=f"No lots found for sale {sale_id}")
 
+    # Check session median is available (needed for scoring)
+    if features_df["session_median_price"].isna().all() or (features_df["session_median_price"] == 0).all():
+        conn.close()
+        raise HTTPException(
+            status_code=422,
+            detail="No session median available. This sale has no sold lots and no prior year history. "
+                   "Please provide a session_median query parameter."
+        )
+
     # Load models and score
-    model_dir = get_model_dir(country_code)
-    models, offsets, feature_cols = load_models(model_dir)
+    try:
+        model_dir = get_model_dir(country_code)
+        models, offsets, feature_cols = load_models(model_dir)
+    except (ValueError, FileNotFoundError) as e:
+        conn.close()
+        raise HTTPException(status_code=422, detail=f"No model available for country '{country_code}': {e}")
     results_df = score_lots(features_df, models, offsets, feature_cols, country_code)
 
     # Fetch existing predictions from database
@@ -1538,8 +1573,9 @@ async def train_model_endpoint(
     Training runs in the background. Check GET /api/train/status for progress.
     """
     country = country.lower()
-    if country not in ["aus", "nzl", "usa"]:
-        raise HTTPException(status_code=400, detail=f"Invalid country: {country}. Must be aus, nzl, or usa.")
+    valid_countries = [k.lower() for k in config.app.regions.keys()]
+    if country not in valid_countries:
+        raise HTTPException(status_code=400, detail=f"Invalid country: {country}. Must be one of: {', '.join(valid_countries)}.")
 
     if training_state["active"]:
         raise HTTPException(
@@ -1732,8 +1768,9 @@ async def list_models(
     Returns feature importance and training report info for each model.
     """
     country = country.lower()
-    if country not in ["aus", "nzl", "usa"]:
-        raise HTTPException(status_code=400, detail=f"Invalid country: {country}. Must be aus, nzl, or usa.")
+    valid_countries = [k.lower() for k in config.app.regions.keys()]
+    if country not in valid_countries:
+        raise HTTPException(status_code=400, detail=f"Invalid country: {country}. Must be one of: {', '.join(valid_countries)}.")
 
     models_dir = Path("models")
     if not models_dir.exists():

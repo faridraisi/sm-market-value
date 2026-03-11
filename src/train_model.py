@@ -886,6 +886,12 @@ def train_model(country: str, version: str = None, csv_path: str = None, on_prog
     else:
         df = export_training_data(country)
 
+    if df.empty or "log_price_index" not in df.columns:
+        raise ValueError(
+            f"No valid training data for {country.upper()}. "
+            "This usually means there are no sold lots with prices in the database for this region."
+        )
+
     # Prepare features
     _progress("preparing_features")
     print("\nPreparing features...")

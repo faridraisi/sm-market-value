@@ -1,0 +1,71 @@
+============================================================
+MARKET VALUE MODEL — TRAINING REPORT (IRE)
+============================================================
+Generated: 2026-03-10 10:16:16
+Model Version: v1
+Country: IRE
+
+DATA
+------------------------------------------------------------
+Total samples: 2,777
+Train: 1,953 rows
+Validation: 218 rows
+Test: 606 rows
+Features: 28
+
+BASELINE MODEL: Elastic Net
+------------------------------------------------------------
+Train MAE: 0.6449
+Train R²:  0.0403
+Test MAE:  0.6149
+Test R²:   0.0378
+Naive MAE: 0.6171
+✓ Baseline passes: Better than naive predictor
+
+QUANTILE MODELS
+------------------------------------------------------------
+Q25: 28 trees (early stopped)
+Q50: 12 trees (early stopped)
+Q75: 39 trees (early stopped)
+
+MODEL EVALUATION
+------------------------------------------------------------
+P50 (Expected) Performance:
+  MAE:  0.6062
+  RMSE: 0.7744
+  R²:   0.0339
+
+Coverage (before calibration):
+  % below P25: 21.8% (target: 25%)
+  % below P75: 71.1% (target: 75%)
+
+Dollar-space (P50):
+  MAPE: 84.0%
+
+CALIBRATION
+------------------------------------------------------------
+Offsets (log space):
+  P25: 0.0807
+  P75: 0.0539
+
+Calibrated coverage:
+  % below P25: 23.3% (target: 25%)
+  % below P75: 73.9% (target: 75%)
+
+FEATURE IMPORTANCE (Top 15)
+------------------------------------------------------------
+  vendor_median_price_36m                  96.8
+  sire_median_price_36m                    77.4
+  sire_median_price_12m                    63.7
+  sire_sold_count_36m                      55.3
+  vendor_sold_count_36m                    50.6
+  log_sire_median_price_36m                48.3
+  sire_momentum                            41.9
+  sire_total_offered_12m                   41.2
+  sex_encoded                              35.1
+  session_median_price                     33.2
+  sire_sold_count_12m                      28.8
+  vendor_total_offered_36m                 27.8
+  sire_clearance_rate_36m                  27.3
+  sire_total_offered_36m                   27.3
+  vendor_clearance_rate_36m                18.5

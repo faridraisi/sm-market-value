@@ -1,0 +1,71 @@
+============================================================
+MARKET VALUE MODEL — TRAINING REPORT (GBR)
+============================================================
+Generated: 2026-03-10 10:15:27
+Model Version: v1
+Country: GBR
+
+DATA
+------------------------------------------------------------
+Total samples: 3,998
+Train: 3,573 rows
+Validation: 397 rows
+Test: 28 rows
+Features: 28
+
+BASELINE MODEL: Elastic Net
+------------------------------------------------------------
+Train MAE: 0.7445
+Train R²:  0.0537
+Test MAE:  1.0660
+Test R²:   0.0268
+Naive MAE: 1.0684
+✓ Baseline passes: Better than naive predictor
+
+QUANTILE MODELS
+------------------------------------------------------------
+Q25: 23 trees (early stopped)
+Q50: 40 trees (early stopped)
+Q75: 98 trees (early stopped)
+
+MODEL EVALUATION
+------------------------------------------------------------
+P50 (Expected) Performance:
+  MAE:  1.1074
+  RMSE: 1.3342
+  R²:   -0.0287
+
+Coverage (before calibration):
+  % below P25: 32.1% (target: 25%)
+  % below P75: 64.3% (target: 75%)
+
+Dollar-space (P50):
+  MAPE: 200.5%
+
+CALIBRATION
+------------------------------------------------------------
+Offsets (log space):
+  P25: -0.2320
+  P75: 0.3431
+
+Calibrated coverage:
+  % below P25: 25.0% (target: 25%)
+  % below P75: 75.0% (target: 75%)
+
+FEATURE IMPORTANCE (Top 15)
+------------------------------------------------------------
+  sire_median_price_36m                    256.3
+  vendor_median_price_36m                  233.0
+  session_median_price                     176.3
+  sire_sold_count_36m                      169.6
+  vendor_sold_count_36m                    153.7
+  sire_median_price_12m                    139.3
+  sire_total_offered_36m                   98.9
+  sire_sold_count_12m                      85.1
+  vendor_total_offered_36m                 81.4
+  sex_encoded                              72.0
+  sire_clearance_rate_36m                  62.0
+  log_vendor_median_price_36m              55.4
+  dam_progeny_median_price                 54.4
+  sire_total_offered_12m                   52.7
+  vendor_clearance_rate_36m                52.2

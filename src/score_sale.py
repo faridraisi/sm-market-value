@@ -249,7 +249,7 @@ def score_lots(
     ]
     for col in price_cols:
         if col in df.columns:
-            df[f"log_{col}"] = np.log1p(df[col].fillna(0))
+            df[f"log_{col}"] = np.log1p(pd.to_numeric(df[col], errors="coerce").fillna(0))
 
     # Encode categoricals
     for col in ["sex", "vendor_volume_bucket", "sale_company"]:
