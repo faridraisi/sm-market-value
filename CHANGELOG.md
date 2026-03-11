@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.16.0] - 2026-03-12
+
+### Added
+- **Protected API docs** - `/docs` and `/redoc` now require HTTP Basic Auth (`DOCS_USERNAME`/`DOCS_PASSWORD` env vars). Docs are disabled (403) if not configured.
+- **Fuzzy sale history matching** - Prior year and history lookups now use fuzzy name matching (company + name similarity ≥ 0.75) instead of company + salesTypeId + month, fixing missing history for sales with inconsistent type IDs across years
+- **Sale names/types in history** - `SaleHistoryYear` response now includes `sale_names` and `sale_type_ids` fields
+- **Dynamic country validation** - Training endpoint now accepts all countries configured in `config.json` instead of hardcoded aus/nzl/usa list
+
+### Improved
+- **HTML OTP email** - Verification email now sends styled HTML with branded "Stallion Match" header, large code display on grey background, and plain text fallback
+- **Better error messages** - Scoring endpoints return 422 with clear message when session median is unavailable or model doesn't exist for a country
+- **Training error clarity** - Training failure due to missing price data now returns a meaningful message instead of a cryptic `log_price_index` KeyError
+- **log1p coercion fix** - `score_sale.py` now coerces price columns to numeric before `np.log1p`, matching the fix already in `train_model.py`
+
 ## [2.15.0] - 2026-02-10
 
 ### Added

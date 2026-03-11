@@ -3,7 +3,7 @@
 API documentation for the Market Value scoring system. This document covers all endpoints, authentication, request/response formats, and integration examples.
 
 **Base URL:** `http://localhost:8000` (development) or `https://smmarketvalue.stallionmatch.horse` (production)
-**API Version:** 2.15.0
+**API Version:** 2.16.0
 
 ---
 
@@ -46,6 +46,17 @@ For user-based authentication, use the email OTP flow:
 Authorization: Bearer <jwt-token>
 ```
 
+### API Documentation Access
+
+The interactive docs (`/docs`, `/redoc`) are protected with HTTP Basic Authentication, separate from the API key. Set the following env vars to enable:
+
+```env
+DOCS_USERNAME=your_username
+DOCS_PASSWORD=your_password
+```
+
+If these are not set, the docs endpoints return `403 Forbidden`.
+
 ### Environment Setup
 
 Create a `.env` file with the following credentials:
@@ -69,6 +80,10 @@ JWT_EXPIRY_HOURS=24
 
 # Dev mode (skip email, log OTP to console)
 AUTH_DEV_MODE=false
+
+# Docs authentication (optional - docs disabled if not set)
+DOCS_USERNAME=your_docs_username
+DOCS_PASSWORD=your_docs_password
 
 # Activity log rotation (optional)
 ACTIVITY_LOG_MAX_MB=20

@@ -84,3 +84,14 @@ spec:
             secretKeyRef:
               name: aws-secret-smmarketvalue
               key: AUTH_DEV_MODE
+        # Docs authentication
+        - name: DOCS_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: DOCS_USERNAME
+        - name: DOCS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: aws-secret-smmarketvalue
+              key: DOCS_PASSWORD

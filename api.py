@@ -19,13 +19,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
+import hmac
+import secrets
+
 import httpx
 import jwt
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Security, Query, BackgroundTasks, UploadFile, File, Header
+from fastapi import FastAPI, HTTPException, Security, Query, BackgroundTasks, UploadFile, File, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import APIKeyHeader
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.security import APIKeyHeader, HTTPBasic, HTTPBasicCredentials
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from pydantic import BaseModel, EmailStr
 from dotenv import load_dotenv
 
@@ -36,7 +40,7 @@ from src.config import config, CONFIG_PATH
 
 load_dotenv()
 
-app = FastAPI(title="Market Value API", version=MODEL_VERSION)
+app = FastAPI(title="Market Value API", version=MODEL_VERSION, docs_url=None, redoc_url=None, openapi_url=None)
 
 # CORS middleware for local development
 app.add_middleware(
@@ -46,6 +50,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Docs auth (Basic HTTP)
+docs_security = HTTPBasic(auto_error=False)
+
+def verify_docs_auth(credentials: HTTPBasicCredentials = Depends(docs_security)):
+    docs_user = os.getenv("DOCS_USERNAME")
+    docs_pass = os.getenv("DOCS_PASSWORD")
+    if not docs_user or not docs_pass:
+        raise HTTPException(status_code=403, detail="Docs are disabled")
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Authentication required",
+                            headers={"WWW-Authenticate": "Basic"})
+    user_ok = hmac.compare_digest(credentials.username.encode(), docs_user.encode())
+    pass_ok = hmac.compare_digest(credentials.password.encode(), docs_pass.encode())
+    if not (user_ok and pass_ok):
+        raise HTTPException(status_code=401, detail="Invalid credentials",
+                            headers={"WWW-Authenticate": "Basic"})
+
+@app.get("/openapi.json", include_in_schema=False)
+async def get_openapi(credentials: HTTPBasicCredentials = Depends(verify_docs_auth)):
+    return JSONResponse(app.openapi())
+
+@app.get("/docs", include_in_schema=False)
+async def docs(credentials: HTTPBasicCredentials = Depends(verify_docs_auth)):
+    return get_swagger_ui_html(openapi_url="/openapi.json", title=app.title)
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc(credentials: HTTPBasicCredentials = Depends(verify_docs_auth)):
+    return get_redoc_html(openapi_url="/openapi.json", title=app.title)
+
 
 # Auth
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -90,14 +124,30 @@ def send_otp_email(email: str, code: str) -> bool:
             },
             json={
                 "to": email,
-                "subject": f"Market Value API - Verification Code: {code}",
+                "subject": f"Stallion Match - Verification Code",
                 "body_text": (
-                    f"Hi,\n\n"
-                    f"Your one-time verification code for the Market Value API is:\n\n"
+                    f"Stallion Match Data Management\n\n"
+                    f"Your one-time login code is:\n\n"
                     f"    {code}\n\n"
-                    f"This code is valid for 10 minutes. If you did not request this code, "
-                    f"please ignore this email.\n\n"
-                    f"- StallionMatch Market Value"
+                    f"This code expires in 10 minutes.\n\n"
+                    f"If you didn't request this code, please ignore this email."
+                ),
+                "body_html": (
+                    f'<div style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; '
+                    f'max-width: 480px; margin: 0 auto; padding: 40px 20px;">'
+                    f'<h2 style="color: #10b981; font-size: 20px; font-weight: 700; margin: 0 0 24px 0;">'
+                    f'Stallion Match Data Management</h2>'
+                    f'<p style="color: #374151; font-size: 15px; margin: 0 0 16px 0;">'
+                    f'Your one-time login code is:</p>'
+                    f'<div style="background: #f3f4f6; border-radius: 8px; padding: 20px; '
+                    f'text-align: center; margin: 0 0 16px 0;">'
+                    f'<span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; '
+                    f'color: #111827;">{code}</span></div>'
+                    f'<p style="color: #6b7280; font-size: 13px; margin: 0 0 8px 0;">'
+                    f'This code expires in 10 minutes.</p>'
+                    f'<p style="color: #6b7280; font-size: 13px; margin: 0;">'
+                    f'If you didn\'t request this code, please ignore this email.</p>'
+                    f'</div>'
                 ),
             },
             timeout=10.0
