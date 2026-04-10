@@ -1,6 +1,28 @@
 # Lot Type Expansion — Considerations
 
-Current model supports **Yearling** lots only. This document outlines considerations for adding other lot types.
+## Overview
+
+The Market Value API currently trains and scores **Yearling** lots only. All sales in the system are filtered to `salesLotTypeName = 'Yearling'` across training (`train_model.py`), feature building (`run_rebuild.py`), and scoring (`score_sale.py`).
+
+The database contains 11 lot types across 10+ countries, but only a subset have enough sold data (with prices) to support model training. This document evaluates each lot type for feasibility, outlines a phased expansion roadmap starting with **Weanling**, and identifies technical challenges that must be addressed.
+
+### Current Pipeline (Yearling Only)
+
+1. **Training** — `fetch_sale_lots()` and `fetch_hist_lots()` filter on `salesLotTypeName = 'Yearling'`
+2. **Feature building** — Sire/dam/vendor metrics computed from yearling-only historical data
+3. **Session median** — Computed from sold yearling lots in the sale (or prior year yearling fallback)
+4. **Scoring** — Model predicts `log_price_index = log(hammer_price / session_median_price)` for yearling lots
+5. **Write-back** — Predictions stored in `tblHorseAnalytics` keyed by horse ID and sale ID
+
+### Expansion Goal
+
+Support multiple lot types with minimal pipeline changes. Priority order:
+1. **Weanling** — Similar to yearling, same features, good data volume
+2. **Broodmare** — Different price drivers, needs separate feature engineering
+3. **Breeze Up** — Small dataset, may need workout data
+4. **Race Horse** — Requires race performance data, fundamentally different model
+
+---
 
 ## Data Volume (since 2020)
 
@@ -17,85 +39,6 @@ Current model supports **Yearling** lots only. This document outlines considerat
 | Foal at Foot | 38 | 20 | 53% | Not viable |
 | Broodmare in Foal | 814 | 0 | 0% | Not viable |
 | Breeding Right | 2 | 0 | 0% | Not viable |
-
-### Yearling — by Country
-
-| Country | Total | Sold | Clearance |
-|---------|-------|------|-----------|
-| USA | 56,054 | 33,924 | 70% |
-| AUS | 39,859 | 28,125 | 84% |
-| GBR | 19,440 | 4,008 | 21% |
-| JPN | 12,197 | 3,752 | 32% |
-| NZL | 9,915 | 6,489 | 76% |
-| FRA | 9,472 | 3,176 | 34% |
-| IRE | 3,877 | 2,798 | 77% |
-| ZAF | 2,598 | 0 | — |
-| GER | 953 | 0 | — |
-| CAN | 449 | 0 | — |
-
-### Weanling — by Country
-
-| Country | Total | Sold | Clearance |
-|---------|-------|------|-----------|
-| USA | 13,005 | 5,530 | 53% |
-| AUS | 7,155 | 4,362 | 76% |
-| IRE | 4,780 | 0 | — |
-| GBR | 3,132 | 88 | 3% |
-| NZL | 994 | 674 | 77% |
-| JPN | 803 | 180 | 23% |
-| FRA | 747 | 60 | 8% |
-| GER | 453 | 0 | — |
-
-### Broodmare — by Country
-
-| Country | Total | Sold | Clearance |
-|---------|-------|------|-----------|
-| USA | 15,797 | 9,994 | 77% |
-| AUS | 4,557 | 3,058 | 77% |
-| GBR | 3,278 | 1 | 0% |
-| JPN | 1,139 | 358 | 32% |
-| IRE | 876 | 0 | — |
-| NZL | 70 | 36 | 55% |
-| FRA | 20 | 2 | 10% |
-| GER | 1 | 0 | — |
-
-### Race Horse — by Country
-
-| Country | Total | Sold | Clearance |
-|---------|-------|------|-----------|
-| USA | 8,571 | 3,298 | 53% |
-| GBR | 7,374 | 1,091 | 16% |
-| FRA | 4,097 | 226 | 6% |
-| AUS | 2,010 | 1,453 | 84% |
-| GER | 193 | 0 | — |
-| IRE | 133 | 0 | — |
-| NZL | 70 | 36 | 55% |
-| HKG | 41 | 20 | 49% |
-
-### Breeze Up — by Country
-
-| Country | Total | Sold | Clearance |
-|---------|-------|------|-----------|
-| USA | 4,086 | 637 | 17% |
-| GBR | 2,972 | 0 | — |
-| AUS | 2,386 | 1,323 | 74% |
-| FRA | 775 | 0 | — |
-| ZAF | 759 | 0 | — |
-| IRE | 705 | 0 | — |
-| NZL | 640 | 404 | 81% |
-| JPN | 439 | 75 | 17% |
-
-### Horse In Training — by Country
-
-| Country | Total | Sold | Clearance |
-|---------|-------|------|-----------|
-| GBR | 4,155 | 12 | 0% |
-| USA | 3,520 | 362 | 11% |
-| JPN | 396 | 0 | — |
-| IRE | 286 | 0 | — |
-| AUS | 165 | 127 | 91% |
-| GER | 2 | 0 | — |
-| FRA | 1 | 0 | — |
 
 ---
 
@@ -129,7 +72,7 @@ Train a dedicated model using only weanling sale data.
 
 ---
 
-### Option B: Combined Model with Lot Type Feature (Recommended)
+### Option B: Combined Model with Lot Type Feature 
 
 Include weanling lots in the existing training pipeline alongside yearlings, with a `lot_type` encoded feature.
 
@@ -153,9 +96,9 @@ Include weanling lots in the existing training pipeline alongside yearlings, wit
 
 ---
 
-### Recommended Approach
 
-**Start with Option B**, then evaluate:
+
+**IF Start with Option B**, evaluate:
 
 1. **Add weanling lots to training data** — Change `salesLotTypeName = 'Yearling'` filter to `IN ('Yearling', 'Weanling')`
 2. **Add `lot_type` feature** — Encode as `lot_type_encoded` (0 = Yearling, 1 = Weanling) in training and scoring
@@ -270,3 +213,86 @@ The following lot types have insufficient sold data for meaningful model trainin
 - **Foal at Foot** — 20 sold
 - **Broodmare in Foal** — 0 sold (no price data)
 - **Breeding Right** — 0 sold
+
+---
+
+## Appendix: Data Volume by Country (since 2020)
+
+### Yearling — by Country
+
+| Country | Total | Sold | Clearance |
+|---------|-------|------|-----------|
+| USA | 56,054 | 33,924 | 70% |
+| AUS | 39,859 | 28,125 | 84% |
+| GBR | 19,440 | 4,008 | 21% |
+| JPN | 12,197 | 3,752 | 32% |
+| NZL | 9,915 | 6,489 | 76% |
+| FRA | 9,472 | 3,176 | 34% |
+| IRE | 3,877 | 2,798 | 77% |
+| ZAF | 2,598 | 0 | — |
+| GER | 953 | 0 | — |
+| CAN | 449 | 0 | — |
+
+### Weanling — by Country
+
+| Country | Total | Sold | Clearance |
+|---------|-------|------|-----------|
+| USA | 13,005 | 5,530 | 53% |
+| AUS | 7,155 | 4,362 | 76% |
+| IRE | 4,780 | 0 | — |
+| GBR | 3,132 | 88 | 3% |
+| NZL | 994 | 674 | 77% |
+| JPN | 803 | 180 | 23% |
+| FRA | 747 | 60 | 8% |
+| GER | 453 | 0 | — |
+
+### Broodmare — by Country
+
+| Country | Total | Sold | Clearance |
+|---------|-------|------|-----------|
+| USA | 15,797 | 9,994 | 77% |
+| AUS | 4,557 | 3,058 | 77% |
+| GBR | 3,278 | 1 | 0% |
+| JPN | 1,139 | 358 | 32% |
+| IRE | 876 | 0 | — |
+| NZL | 70 | 36 | 55% |
+| FRA | 20 | 2 | 10% |
+| GER | 1 | 0 | — |
+
+### Race Horse — by Country
+
+| Country | Total | Sold | Clearance |
+|---------|-------|------|-----------|
+| USA | 8,571 | 3,298 | 53% |
+| GBR | 7,374 | 1,091 | 16% |
+| FRA | 4,097 | 226 | 6% |
+| AUS | 2,010 | 1,453 | 84% |
+| GER | 193 | 0 | — |
+| IRE | 133 | 0 | — |
+| NZL | 70 | 36 | 55% |
+| HKG | 41 | 20 | 49% |
+
+### Breeze Up — by Country
+
+| Country | Total | Sold | Clearance |
+|---------|-------|------|-----------|
+| USA | 4,086 | 637 | 17% |
+| GBR | 2,972 | 0 | — |
+| AUS | 2,386 | 1,323 | 74% |
+| FRA | 775 | 0 | — |
+| ZAF | 759 | 0 | — |
+| IRE | 705 | 0 | — |
+| NZL | 640 | 404 | 81% |
+| JPN | 439 | 75 | 17% |
+
+### Horse In Training — by Country
+
+| Country | Total | Sold | Clearance |
+|---------|-------|------|-----------|
+| GBR | 4,155 | 12 | 0% |
+| USA | 3,520 | 362 | 11% |
+| JPN | 396 | 0 | — |
+| IRE | 286 | 0 | — |
+| AUS | 165 | 127 | 91% |
+| GER | 2 | 0 | — |
+| FRA | 1 | 0 | — |
